@@ -2,95 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core brand colors - Warm coral/orange theme */
+    --background: 30 50% 98%;
+    --foreground: 20 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 20 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 20 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Warm coral */
+    --primary: 16 85% 60%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Soft teal */
+    --secondary: 174 42% 92%;
+    --secondary-foreground: 174 50% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Warm cream */
+    --muted: 35 30% 94%;
+    --muted-foreground: 20 15% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Golden amber */
+    --accent: 38 92% 65%;
+    --accent-foreground: 38 80% 15%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 16 85% 60%;
 
-    --radius: 0.5rem;
+    --radius: 1rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Custom semantic colors */
+    --success: 152 60% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 55%;
+    --warning-foreground: 38 80% 15%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --info: 200 75% 55%;
+    --info-foreground: 0 0% 100%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Pet-themed accent colors */
+    --paw-coral: 16 85% 60%;
+    --paw-teal: 174 55% 45%;
+    --paw-amber: 38 92% 65%;
+    --paw-cream: 35 45% 95%;
+    --paw-sage: 140 30% 65%;
+    --paw-lavender: 270 40% 75%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    /* Gradient definitions */
+    --gradient-primary: linear-gradient(135deg, hsl(16 85% 60%), hsl(38 92% 65%));
+    --gradient-hero: linear-gradient(180deg, hsl(30 50% 98%) 0%, hsl(35 45% 95%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(35 30% 97%) 100%);
+    --gradient-teal: linear-gradient(135deg, hsl(174 55% 45%), hsl(174 42% 70%));
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -4px hsl(20 25% 15% / 0.08);
+    --shadow-card: 0 8px 30px -10px hsl(20 25% 15% / 0.12);
+    --shadow-elevated: 0 12px 40px -15px hsl(20 25% 15% / 0.18);
+    --shadow-glow: 0 0 30px hsl(16 85% 60% / 0.3);
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sidebar */
+    --sidebar-background: 35 45% 97%;
+    --sidebar-foreground: 20 25% 25%;
+    --sidebar-primary: 16 85% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 35 30% 92%;
+    --sidebar-accent-foreground: 20 25% 15%;
+    --sidebar-border: 30 20% 90%;
+    --sidebar-ring: 16 85% 60%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 20 20% 8%;
+    --foreground: 35 30% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 20 18% 12%;
+    --card-foreground: 35 30% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 20 18% 12%;
+    --popover-foreground: 35 30% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 16 80% 55%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 174 30% 20%;
+    --secondary-foreground: 174 45% 85%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 20 15% 18%;
+    --muted-foreground: 30 15% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 38 80% 50%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 20 15% 20%;
+    --input: 20 15% 20%;
+    --ring: 16 80% 55%;
+
+    --sidebar-background: 20 18% 10%;
+    --sidebar-foreground: 35 30% 90%;
+    --sidebar-primary: 16 80% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 20 15% 16%;
+    --sidebar-accent-foreground: 35 30% 95%;
+    --sidebar-border: 20 15% 18%;
+    --sidebar-ring: 16 80% 55%;
+  }
+
+  /* Theme variants */
+  .theme-coral {
+    --primary: 16 85% 60%;
+    --ring: 16 85% 60%;
+    --paw-coral: 16 85% 60%;
+  }
+
+  .theme-teal {
+    --primary: 174 55% 45%;
+    --ring: 174 55% 45%;
+    --paw-coral: 174 55% 45%;
+  }
+
+  .theme-amber {
+    --primary: 38 92% 55%;
+    --ring: 38 92% 55%;
+    --paw-coral: 38 92% 55%;
+  }
+
+  .theme-sage {
+    --primary: 140 40% 45%;
+    --ring: 140 40% 45%;
+    --paw-coral: 140 40% 45%;
+  }
+
+  .theme-lavender {
+    --primary: 270 50% 60%;
+    --ring: 270 50% 60%;
+    --paw-coral: 270 50% 60%;
+  }
+
+  .theme-rose {
+    --primary: 350 70% 55%;
+    --ring: 350 70% 55%;
+    --paw-coral: 350 70% 55%;
   }
 }
 
@@ -100,6 +165,117 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-body antialiased;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-bold;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .gradient-teal {
+    background: var(--gradient-teal);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .paw-pattern {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 25c3 0 5.5 2.5 5.5 5.5S33 36 30 36s-5.5-2.5-5.5-5.5S27 25 30 25zm-8-5c2 0 3.5 1.5 3.5 3.5S24 27 22 27s-3.5-1.5-3.5-3.5S20 20 22 20zm16 0c2 0 3.5 1.5 3.5 3.5S40 27 38 27s-3.5-1.5-3.5-3.5S36 20 38 20zm-12 12c1.5 0 2.5 1 2.5 2.5s-1 2.5-2.5 2.5-2.5-1-2.5-2.5 1-2.5 2.5-2.5zm8 0c1.5 0 2.5 1 2.5 2.5s-1 2.5-2.5 2.5-2.5-1-2.5-2.5 1-2.5 2.5-2.5z' fill='%23f97316' fill-opacity='0.05'/%3E%3C/svg%3E");
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 3s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
 }
