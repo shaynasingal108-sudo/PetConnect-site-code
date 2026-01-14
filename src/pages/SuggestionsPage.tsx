@@ -1,19 +1,40 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Brain, Search, Send } from 'lucide-react';
+import { Loader2, Brain, Search, Send, Users, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
+
+interface AIResponse {
+  suggestion: string;
+  recommendedGroups: Array<{
+    id: string;
+    name: string;
+    description: string;
+    tags: string[];
+  }>;
+  recommendedBusinesses: Array<{
+    business_name: string;
+    business_category: string;
+    business_description: string;
+    city: string;
+  }>;
+}
 
 export default function SuggestionsPage() {
   const { profile } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [question, setQuestion] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
+  const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [isAsking, setIsAsking] = useState(false);
 
   const { data: searchResults, isLoading: isSearching } = useQuery({
@@ -33,17 +54,41 @@ export default function SuggestionsPage() {
   const handleAskAI = async () => {
     if (!question.trim()) return;
     setIsAsking(true);
+    setAiResponse(null);
     
-    // Simulate AI response
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setAiResponse(
-      `Based on your question about "${question}" and your ${profile?.pet_type || 'pet'} (${profile?.pet_breed || 'breed not specified'}), here are some suggestions:\n\n` +
-      `1. Consider consulting with a vet if this is a health concern.\n` +
-      `2. Join our ${profile?.pet_type || 'pet'} training community for tips.\n` +
-      `3. Check out posts from experienced owners in your area.\n\n` +
-      `⚠️ Disclaimer: For urgent health symptoms, please consult a veterinary professional immediately.`
-    );
-    setIsAsking(false);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-suggestions', {
+        body: { 
+          question: question.trim(),
+          petType: profile?.pet_type,
+          petBreed: profile?.pet_breed,
+          city: profile?.city
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        // Handle rate limit or credit errors
+        toast({
+          title: 'AI Error',
+          description: data.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setAiResponse(data);
+    } catch (error: any) {
+      console.error('AI error:', error);
+      toast({
+        title: 'Could not get suggestions',
+        description: error.message || 'Please try again later.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAsking(false);
+    }
   };
 
   return (
@@ -68,7 +113,7 @@ export default function SuggestionsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
-                placeholder="What would you like to know about your pet?"
+                placeholder="What would you like to know about your pet? E.g., 'My dog is scratching a lot, what could it be?'"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 rows={3}
@@ -84,15 +129,85 @@ export default function SuggestionsPage() {
             </CardContent>
           </Card>
 
-          {aiResponse && (
+          {isAsking && (
             <Card>
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">🤖</span>
-                  <div className="whitespace-pre-wrap">{aiResponse}</div>
+              <CardContent className="py-8 flex justify-center">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="text-muted-foreground">Thinking...</span>
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {aiResponse && (
+            <div className="space-y-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">🤖</span>
+                    <div className="whitespace-pre-wrap text-sm">{aiResponse.suggestion}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {aiResponse.recommendedGroups.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Users className="h-4 w-4" /> Recommended Groups
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {aiResponse.recommendedGroups.map((group) => (
+                      <div 
+                        key={group.id}
+                        className="p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => navigate(`/groups/${group.id}`)}
+                      >
+                        <div className="font-medium text-sm">{group.name}</div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{group.description}</p>
+                        {group.tags && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {group.tags.slice(0, 3).map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {aiResponse.recommendedBusinesses.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Building2 className="h-4 w-4" /> Local Pet Businesses
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {aiResponse.recommendedBusinesses.map((business, idx) => (
+                      <div key={idx} className="p-3 bg-muted/50 rounded-lg">
+                        <div className="font-medium text-sm">{business.business_name}</div>
+                        <Badge variant="outline" className="text-xs mt-1">
+                          {business.business_category}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {business.business_description}
+                        </p>
+                        {business.city && (
+                          <p className="text-xs text-muted-foreground mt-1">📍 {business.city}</p>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
         </TabsContent>
 
@@ -126,6 +241,13 @@ export default function SuggestionsPage() {
                     )}
                   </div>
                   <p className="text-sm">{post.content}</p>
+                  {post.image_url && (
+                    <img 
+                      src={post.image_url} 
+                      alt="Post" 
+                      className="mt-2 rounded-lg w-full h-40 object-cover"
+                    />
+                  )}
                 </CardContent>
               </Card>
             ))
