@@ -22,6 +22,7 @@ import QuizPage from "./pages/QuizPage";
 import SuggestionsPage from "./pages/SuggestionsPage";
 import AILifePage from "./pages/AILifePage";
 import TasksPage from "./pages/TasksPage";
+import UserProfilePage from "./pages/UserProfilePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,8 +40,9 @@ const App = () => (
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route element={<MainLayout />}>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/groups" element={<GroupsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/:userId" element={<UserProfilePage />} />
+              <Route path="/groups" element={<GroupsPage />} />
                 <Route path="/groups/:groupId" element={<GroupDetailPage />} />
                 <Route path="/boards" element={<BoardsPage />} />
                 <Route path="/friends" element={<FriendsPage />} />
