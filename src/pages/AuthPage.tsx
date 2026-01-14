@@ -110,9 +110,28 @@ export default function AuthPage() {
             </TabsContent>
           </Tabs>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Demo: test@example.com / password123
-          </p>
+          <div className="mt-6 p-4 bg-muted rounded-lg">
+            <p className="text-center text-sm font-semibold mb-2">Quick Demo Access</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 text-xs"
+                onClick={async () => {
+                  setIsLoading(true);
+                  const { error } = await signUp(`demo${Date.now()}@test.com`, 'demo123456', `DemoUser${Math.floor(Math.random()*1000)}`);
+                  setIsLoading(false);
+                  if (!error) navigate('/onboarding');
+                }}
+                disabled={isLoading}
+              >
+                Create Demo Account
+              </Button>
+            </div>
+            <p className="text-center text-xs text-muted-foreground mt-2">
+              Or sign up with your own email
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

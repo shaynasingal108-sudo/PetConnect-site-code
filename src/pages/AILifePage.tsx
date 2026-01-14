@@ -1,0 +1,131 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Plus, Eye } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+
+export default function AILifePage() {
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [newEntry, setNewEntry] = useState('');
+  const [entryType, setEntryType] = useState('update');
+
+  const { data: entries, isLoading } = useQuery({
+    queryKey: ['ai-life-entries', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ai_life_entries')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const addEntry = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('ai_life_entries').insert({
+        user_id: user?.id,
+        content: newEntry,
+        entry_type: entryType,
+        pet_name: profile?.username + "'s pet",
+        pet_type: profile?.pet_type,
+        pet_breed: profile?.pet_breed,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-life-entries'] });
+      setNewEntry('');
+      toast({ title: 'Entry added!', description: 'Your pet update has been recorded.' });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="text-center py-4">
+        <h1 className="font-display text-2xl font-bold flex items-center justify-center gap-2">
+          <span>🤖</span> AI Pet Life
+        </h1>
+        <p className="text-muted-foreground">Track your pet's life and get AI-powered insights</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Add New Update</CardTitle>
+          <CardDescription>Share updates about your pet's health, behavior, or milestones</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2 flex-wrap">
+            {['update', 'health', 'milestone', 'concern'].map((type) => (
+              <Button
+                key={type}
+                variant={entryType === type ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setEntryType(type)}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </Button>
+            ))}
+          </div>
+          <Textarea
+            placeholder="How is your pet doing today?"
+            value={newEntry}
+            onChange={(e) => setNewEntry(e.target.value)}
+            rows={3}
+          />
+          <Button
+            onClick={() => addEntry.mutate()}
+            disabled={!newEntry.trim() || addEntry.isPending}
+            className="gradient-primary"
+          >
+            {addEntry.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            Add Entry
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        <h2 className="font-display text-xl font-semibold">Your Pet's Timeline</h2>
+        {entries?.length === 0 ? (
+          <Card className="text-center py-8 text-muted-foreground">
+            <p>No entries yet. Start tracking your pet's life!</p>
+          </Card>
+        ) : (
+          entries?.map((entry: any) => (
+            <Card key={entry.id}>
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="inline-block px-2 py-1 text-xs rounded-full bg-primary/10 text-primary mb-2">
+                      {entry.entry_type}
+                    </span>
+                    <p>{entry.content}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(entry.created_at), 'MMM d, yyyy')}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
