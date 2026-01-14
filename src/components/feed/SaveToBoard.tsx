@@ -102,6 +102,28 @@ export function SaveToBoard({ open, onOpenChange, postId }: SaveToBoardProps) {
 
       if (error) throw error;
 
+      // Award 1 point to post author for being saved
+      const { data: postRow } = await supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .single();
+
+      if (postRow?.user_id && postRow.user_id !== user.id) {
+        const { data: authorProfile } = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('user_id', postRow.user_id)
+          .single();
+
+        if (authorProfile) {
+          await supabase
+            .from('profiles')
+            .update({ points: (authorProfile.points || 0) + 1 })
+            .eq('user_id', postRow.user_id);
+        }
+      }
+
       toast({
         title: 'Post saved!',
         description: boardId 
@@ -109,7 +131,7 @@ export function SaveToBoard({ open, onOpenChange, postId }: SaveToBoardProps) {
           : 'Saved to your collection',
       });
       onOpenChange(false);
-    } catch (error: any) {
+
       toast({
         title: 'Error',
         description: error.message,
