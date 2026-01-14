@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Search, Users } from 'lucide-react';
+import { Loader2, Search, Users, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,17 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export default function GroupsPage() {
   const { user } = useAuth();
@@ -66,6 +77,23 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({ queryKey: ['my-memberships'] });
     }
   };
+
+  const deleteGroup = useMutation({
+    mutationFn: async (groupId: string) => {
+      // First delete all memberships for this group
+      await supabase.from('group_memberships').delete().eq('group_id', groupId);
+      // Then delete the group
+      const { error } = await supabase.from('groups').delete().eq('id', groupId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      toast({ title: 'Group deleted!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const getMembershipStatus = (groupId: string) => {
     return myMemberships?.find((m) => m.group_id === groupId)?.status;
@@ -138,7 +166,7 @@ export default function GroupsPage() {
                         <p className="text-xs text-muted-foreground mt-2">📍 {group.city}</p>
                       )}
                     </div>
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {status === 'approved' ? (
                         <Badge className="bg-green-500">Joined</Badge>
                       ) : status === 'pending' ? (
@@ -154,6 +182,36 @@ export default function GroupsPage() {
                         >
                           {group.requires_approval ? 'Request' : 'Join'}
                         </Button>
+                      )}
+                      {group.owner_id === user?.id && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Group</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete "{group.name}"? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteGroup.mutate(group.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       )}
                     </div>
                   </div>

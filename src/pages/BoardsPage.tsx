@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Bookmark, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Bookmark, Pencil, Trash2, ArrowLeft, Heart, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 export default function BoardsPage() {
   const { user } = useAuth();
@@ -16,6 +18,7 @@ export default function BoardsPage() {
   const [newBoardName, setNewBoardName] = useState('');
   const [editingBoard, setEditingBoard] = useState<any>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedBoard, setSelectedBoard] = useState<any>(null);
 
   const { data: boards, isLoading } = useQuery({
     queryKey: ['boards', user?.id],
@@ -28,6 +31,28 @@ export default function BoardsPage() {
       return data || [];
     },
     enabled: !!user,
+  });
+
+  const { data: savedPosts, isLoading: isLoadingSavedPosts } = useQuery({
+    queryKey: ['saved-posts', selectedBoard?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('saved_posts')
+        .select(`
+          *,
+          posts (
+            id,
+            content,
+            image_url,
+            created_at,
+            profiles:user_id (username, avatar_url)
+          )
+        `)
+        .eq('board_id', selectedBoard?.id)
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+    enabled: !!selectedBoard,
   });
 
   const createBoard = useMutation({
@@ -69,10 +94,96 @@ export default function BoardsPage() {
     },
   });
 
+  const removeSavedPost = useMutation({
+    mutationFn: async (savedPostId: string) => {
+      const { error } = await supabase.from('saved_posts').delete().eq('id', savedPostId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-posts'] });
+      queryClient.invalidateQueries({ queryKey: ['boards'] });
+      toast({ title: 'Post removed from board!' });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show board detail view
+  if (selectedBoard) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedBoard(null)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="font-display text-2xl font-bold">{selectedBoard.name}</h1>
+            <p className="text-muted-foreground">
+              {savedPosts?.length || 0} saved posts
+            </p>
+          </div>
+        </div>
+
+        {isLoadingSavedPosts ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : savedPosts?.length === 0 ? (
+          <Card className="text-center py-8 text-muted-foreground">
+            <CardContent>
+              <p>No saved posts in this board yet.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {savedPosts?.map((saved: any) => (
+              <Card key={saved.id} className="overflow-hidden">
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={saved.posts?.profiles?.avatar_url} />
+                      <AvatarFallback>
+                        {saved.posts?.profiles?.username?.charAt(0) || '?'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-sm">
+                          {saved.posts?.profiles?.username || 'Unknown'}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => removeSavedPost.mutate(saved.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-sm mt-1">{saved.posts?.content}</p>
+                      {saved.posts?.image_url && (
+                        <img
+                          src={saved.posts.image_url}
+                          alt="Post"
+                          className="mt-2 rounded-lg max-h-48 object-cover"
+                        />
+                      )}
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Saved on {format(new Date(saved.created_at), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -121,10 +232,14 @@ export default function BoardsPage() {
           </Card>
         ) : (
           boards?.map((board: any) => (
-            <Card key={board.id} className="hover:shadow-md transition-shadow">
+            <Card 
+              key={board.id} 
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => setSelectedBoard(board)}
+            >
               <CardHeader className="pb-2">
                 {editingBoard?.id === board.id ? (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Input
                       value={editingBoard.name}
                       onChange={(e) => setEditingBoard({ ...editingBoard, name: e.target.value })}
@@ -140,7 +255,7 @@ export default function BoardsPage() {
                 ) : (
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{board.name}</CardTitle>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
                         size="icon"
