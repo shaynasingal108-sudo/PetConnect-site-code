@@ -1,11 +1,18 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Store, Star } from 'lucide-react';
+import { Loader2, Store, Star, Plus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { ApplyBusinessDialog } from '@/components/business/ApplyBusinessDialog';
 
 export default function BusinessesPage() {
+  const { profile } = useAuth();
+  const [showApplyDialog, setShowApplyDialog] = useState(false);
+
   const { data: businesses, isLoading } = useQuery({
     queryKey: ['businesses'],
     queryFn: async () => {
@@ -35,12 +42,30 @@ export default function BusinessesPage() {
         <p className="text-muted-foreground">Discover trusted pet services and products</p>
       </div>
 
+      {!profile?.is_business && (
+        <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">Are you a pet business?</h3>
+                <p className="text-sm text-muted-foreground">Register to reach more customers and earn boost points!</p>
+              </div>
+              <Button onClick={() => setShowApplyDialog(true)} className="gradient-primary">
+                <Plus className="h-4 w-4 mr-2" /> Apply Now
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         {businesses?.length === 0 ? (
           <Card className="col-span-full text-center py-12 text-muted-foreground">
-            <Store className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No businesses registered yet.</p>
-            <p className="text-sm">Are you a pet business? Apply from your profile!</p>
+            <CardContent>
+              <Store className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No businesses registered yet.</p>
+              <p className="text-sm">Be the first to register!</p>
+            </CardContent>
           </Card>
         ) : (
           businesses?.map((biz: any) => (
@@ -79,6 +104,8 @@ export default function BusinessesPage() {
           ))
         )}
       </div>
+
+      <ApplyBusinessDialog open={showApplyDialog} onOpenChange={setShowApplyDialog} />
     </div>
   );
 }
