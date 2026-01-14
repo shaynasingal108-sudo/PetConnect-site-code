@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function GroupsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
 
@@ -111,8 +113,14 @@ export default function GroupsPage() {
         ) : (
           filteredGroups?.map((group: any) => {
             const status = getMembershipStatus(group.id);
+            const canViewGroup = status === 'approved' || !group.requires_approval;
+            
             return (
-              <Card key={group.id}>
+              <Card 
+                key={group.id} 
+                className={`${canViewGroup ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={() => canViewGroup && navigate(`/groups/${group.id}`)}
+              >
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -130,7 +138,7 @@ export default function GroupsPage() {
                         <p className="text-xs text-muted-foreground mt-2">📍 {group.city}</p>
                       )}
                     </div>
-                    <div>
+                    <div onClick={(e) => e.stopPropagation()}>
                       {status === 'approved' ? (
                         <Badge className="bg-green-500">Joined</Badge>
                       ) : status === 'pending' ? (
@@ -138,7 +146,10 @@ export default function GroupsPage() {
                       ) : (
                         <Button
                           size="sm"
-                          onClick={() => handleJoin(group.id, group.requires_approval)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleJoin(group.id, group.requires_approval);
+                          }}
                           className="gradient-primary"
                         >
                           {group.requires_approval ? 'Request' : 'Join'}
