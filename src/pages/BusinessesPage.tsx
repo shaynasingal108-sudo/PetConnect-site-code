@@ -8,10 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApplyBusinessDialog } from '@/components/business/ApplyBusinessDialog';
+import { BusinessDetailDialog } from '@/components/business/BusinessDetailDialog';
 
 export default function BusinessesPage() {
   const { profile } = useAuth();
   const [showApplyDialog, setShowApplyDialog] = useState(false);
+  const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
 
   const { data: businesses, isLoading } = useQuery({
     queryKey: ['businesses'],
@@ -69,7 +71,11 @@ export default function BusinessesPage() {
           </Card>
         ) : (
           businesses?.map((biz: any) => (
-            <Card key={biz.id} className="hover:shadow-md transition-shadow">
+            <Card 
+              key={biz.id} 
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => setSelectedBusiness(biz)}
+            >
               <CardContent className="pt-4">
                 <div className="flex items-start gap-4">
                   <Avatar className="h-16 w-16 rounded-xl">
@@ -106,6 +112,11 @@ export default function BusinessesPage() {
       </div>
 
       <ApplyBusinessDialog open={showApplyDialog} onOpenChange={setShowApplyDialog} />
+      <BusinessDetailDialog 
+        business={selectedBusiness} 
+        open={!!selectedBusiness} 
+        onOpenChange={(open) => !open && setSelectedBusiness(null)} 
+      />
     </div>
   );
 }
