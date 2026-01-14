@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'Germany', 'France', 'Other'];
+const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'Germany', 'France', 'India', 'Brazil', 'Japan', 'Mexico', 'Spain', 'Italy', 'Netherlands', 'Singapore', 'South Africa', 'Other'];
 const petTypes = ['Dog', 'Cat', 'Bird', 'Fish', 'Rabbit', 'Hamster', 'Other'];
 const experienceLevels = ['new', 'intermediate', 'experienced'];
 
