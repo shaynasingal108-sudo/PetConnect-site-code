@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Eye, Sparkles, Check, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Eye, Sparkles, Check, AlertTriangle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -64,6 +64,22 @@ export default function AILifePage() {
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['ai-life-entries'] });
       await refreshProfile();
+      setNewEntry('');
+      toast({ 
+        title: 'Entry added! +2 points 🎉', 
+        description: 'Your pet update has been recorded.' 
+      });
+    },
+  });
+
+  const deleteEntry = useMutation({
+    mutationFn: async (entryId: string) => {
+      const { error } = await supabase.from('ai_life_entries').delete().eq('id', entryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-life-entries'] });
+      toast({ title: 'Entry deleted!' });
       setNewEntry('');
       toast({ 
         title: 'Entry added! +2 points 🎉', 
@@ -271,8 +287,8 @@ export default function AILifePage() {
           entries?.map((entry: any) => (
             <Card key={entry.id}>
               <CardContent className="pt-4">
-                <div className="flex items-start justify-between">
-                  <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
                     <span className={`inline-block px-2 py-1 text-xs rounded-full mb-2 ${
                       entry.entry_type === 'health' ? 'bg-red-100 text-red-700' :
                       entry.entry_type === 'concern' ? 'bg-amber-100 text-amber-700' :
@@ -282,10 +298,18 @@ export default function AILifePage() {
                       {entry.entry_type}
                     </span>
                     <p>{entry.content}</p>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(entry.created_at), 'MMM d, yyyy')}
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {format(new Date(entry.created_at), 'MMM d, yyyy')}
-                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive shrink-0"
+                    onClick={() => deleteEntry.mutate(entry.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
