@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, ArrowLeft, Users, Calendar, MapPin, Plus, Send } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, Calendar, MapPin, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { PostCard } from '@/components/feed/PostCard';
 import { format } from 'date-fns';
+import { fetchHydratedPosts } from '@/lib/posts';
+
 
 export default function GroupDetailPage() {
   const { groupId } = useParams();
@@ -60,16 +62,12 @@ export default function GroupDetailPage() {
 
   const { data: posts, isLoading: loadingPosts } = useQuery({
     queryKey: ['group-posts', groupId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('posts')
-        .select(`*, profiles(*), likes(*), comments(*, profiles(*)), helpful_marks(*)`)
-        .eq('group_id', groupId)
-        .order('created_at', { ascending: false });
-      return data || [];
-    },
+    queryFn: () => fetchHydratedPosts({ groupId: groupId as string, limit: 50 }),
     enabled: !!groupId,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
+
 
   const { data: events } = useQuery({
     queryKey: ['group-events', groupId],
@@ -90,13 +88,14 @@ export default function GroupDetailPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('group_memberships')
-        .select('*, profiles:user_id(username, avatar_url)')
+        .select('*')
         .eq('group_id', groupId)
         .eq('status', 'approved');
       return data || [];
     },
     enabled: !!groupId,
   });
+
 
   const isOwner = group?.owner_id === user?.id;
   const isMember = membership?.status === 'approved';

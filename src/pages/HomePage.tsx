@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { PostCard } from '@/components/feed/PostCard';
 import { Loader2 } from 'lucide-react';
+import { fetchHydratedPosts } from '@/lib/posts';
 
 export default function HomePage() {
   const { user, profile, loading } = useAuth();
@@ -18,21 +18,14 @@ export default function HomePage() {
     }
   }, [user, profile, loading, navigate]);
 
-  const { data: posts, isLoading, refetch } = useQuery({
+  const { data: posts, isLoading } = useQuery({
     queryKey: ['posts', profile?.city],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('posts')
-        .select(`*, profiles(*), likes(*), comments(*, profiles(*)), helpful_marks(*)`)
-        .is('group_id', null)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      return data || [];
-    },
+    queryFn: () => fetchHydratedPosts({ groupId: null, limit: 50 }),
     enabled: !!user,
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
+
 
   if (loading || isLoading) {
     return (

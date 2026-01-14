@@ -28,16 +28,41 @@ export function CommentsSection({ postId, comments }: CommentsSectionProps) {
 
     setIsLoading(true);
     try {
-      await supabase.from('comments').insert({
+      const { error } = await supabase.from('comments').insert({
         user_id: user.id,
         post_id: postId,
         parent_id: replyTo,
         content: newComment.trim(),
       });
+      if (error) throw error;
+
+      // Award 1 point to post author for receiving a comment
+      const { data: postRow } = await supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .single();
+
+      if (postRow?.user_id && postRow.user_id !== user.id) {
+        const { data: authorProfile } = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('user_id', postRow.user_id)
+          .single();
+
+        if (authorProfile) {
+          await supabase
+            .from('profiles')
+            .update({ points: (authorProfile.points || 0) + 1 })
+            .eq('user_id', postRow.user_id);
+        }
+      }
 
       setNewComment('');
       setReplyTo(null);
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['group-posts'] });
+
     } catch (error: any) {
       toast({
         title: 'Error',

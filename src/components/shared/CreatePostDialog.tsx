@@ -52,7 +52,8 @@ export function CreatePostDialog({ open, onOpenChange, groupId }: CreatePostDial
       setImageUrl('');
       onOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ['posts'] });
-    } catch (error: any) {
+      if (groupId) queryClient.invalidateQueries({ queryKey: ['group-posts', groupId] });
+
       toast({
         title: 'Error',
         description: error.message,

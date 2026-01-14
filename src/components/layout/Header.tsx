@@ -13,6 +13,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ThemeColor } from '@/types';
 import { Badge } from '@/components/ui/badge';
+import petsConnectLogo from '@/assets/petsconnect-logo.jpeg';
+
 
 const themeOptions: { color: ThemeColor; label: string; preview: string }[] = [
   { color: 'coral', label: 'Coral', preview: 'bg-orange-500' },
@@ -36,14 +38,15 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft group-hover:shadow-glow transition-shadow">
-            <span className="text-xl">🐾</span>
-          </div>
-          <span className="font-display text-xl font-bold text-foreground hidden sm:block">
-            PetsConnect
-          </span>
+        <Link to="/" className="flex items-center gap-3 group">
+          <img
+            src={petsConnectLogo}
+            alt="PetsConnect logo"
+            className="h-10 w-auto"
+            loading="eager"
+          />
         </Link>
+
 
         {user && (
           <nav className="flex items-center gap-1 sm:gap-2">
