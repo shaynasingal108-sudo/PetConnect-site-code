@@ -131,7 +131,7 @@ export function SaveToBoard({ open, onOpenChange, postId }: SaveToBoardProps) {
           : 'Saved to your collection',
       });
       onOpenChange(false);
-
+    } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message,
