@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, Bookmark, ThumbsUp, UserPlus } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, ThumbsUp, UserPlus, Rocket } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { CommentsSection } from './CommentsSection';
 import { SaveToBoard } from './SaveToBoard';
+import { BoostPostDialog } from '@/components/business/BoostPostDialog';
 import { Link } from 'react-router-dom';
 
 interface PostCardProps {
@@ -19,11 +20,15 @@ interface PostCardProps {
 }
 
 export function PostCard({ post }: PostCardProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showBoostDialog, setShowBoostDialog] = useState(false);
+
+  const isOwnPost = user?.id === post.user_id;
+  const isBusinessAccount = profile?.is_business;
 
   const isLiked = post.likes?.some(like => like.user_id === user?.id);
   const isHelpful = post.helpful_marks?.some(mark => mark.user_id === user?.id);
@@ -223,15 +228,30 @@ export function PostCard({ post }: PostCardProps) {
             </Button>
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setShowSaveDialog(true)}
-          >
-            <Bookmark className="h-4 w-4" />
-            <span className="text-xs">Save</span>
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSaveDialog(true)}
+            >
+              <Bookmark className="h-4 w-4" />
+              <span className="text-xs">Save</span>
+            </Button>
+
+            {/* Boost button for business accounts on their own posts */}
+            {isOwnPost && isBusinessAccount && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-primary"
+                onClick={() => setShowBoostDialog(true)}
+              >
+                <Rocket className="h-4 w-4" />
+                <span className="text-xs">Boost</span>
+              </Button>
+            )}
+          </div>
         </div>
 
         {showComments && <CommentsSection postId={post.id} comments={post.comments || []} />}
@@ -242,6 +262,14 @@ export function PostCard({ post }: PostCardProps) {
         onOpenChange={setShowSaveDialog} 
         postId={post.id} 
       />
+
+      {isOwnPost && isBusinessAccount && (
+        <BoostPostDialog
+          postId={post.id}
+          open={showBoostDialog}
+          onOpenChange={setShowBoostDialog}
+        />
+      )}
     </Card>
   );
 }

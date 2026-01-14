@@ -1,20 +1,40 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, User, Save, Camera } from 'lucide-react';
+import { Loader2, User, Save, Camera, Star, Gift, Percent, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 const petTypes = ['Dog', 'Cat', 'Bird', 'Fish', 'Rabbit', 'Hamster', 'Other'];
 const genders = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+
+// Discount tiers
+const discountTiers = [
+  { min: 0, max: 49, discount: 0, tier: 'Starter', color: 'bg-gray-500' },
+  { min: 50, max: 99, discount: 5, tier: 'Bronze', color: 'bg-amber-600' },
+  { min: 100, max: 199, discount: 10, tier: 'Silver', color: 'bg-gray-400' },
+  { min: 200, max: 499, discount: 15, tier: 'Gold', color: 'bg-yellow-500' },
+  { min: 500, max: Infinity, discount: 25, tier: 'Platinum', color: 'bg-purple-500' },
+];
+
+const getCurrentTier = (points: number) => {
+  return discountTiers.find(t => points >= t.min && points <= t.max) || discountTiers[0];
+};
+
+const getNextTier = (points: number) => {
+  const currentIndex = discountTiers.findIndex(t => points >= t.min && points <= t.max);
+  return discountTiers[currentIndex + 1] || null;
+};
 
 export default function ProfilePage() {
   const { profile, refreshProfile } = useAuth();
@@ -53,6 +73,13 @@ export default function ProfilePage() {
     },
   });
 
+  const points = profile?.points || 0;
+  const currentTier = getCurrentTier(points);
+  const nextTier = getNextTier(points);
+  const progressToNext = nextTier 
+    ? ((points - currentTier.min) / (nextTier.min - currentTier.min)) * 100 
+    : 100;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
       <div className="text-center py-4">
@@ -60,6 +87,86 @@ export default function ProfilePage() {
           <User className="h-6 w-6" /> My Profile
         </h1>
       </div>
+
+      {/* Points & Rewards Card */}
+      <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-yellow-500" /> 
+            {profile?.is_business ? 'Business Points' : 'My Rewards'}
+          </CardTitle>
+          <CardDescription>
+            {profile?.is_business 
+              ? 'Use points to boost your posts and reach more customers'
+              : 'Earn points for discounts at pet businesses'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-3xl font-bold text-primary">{points}</p>
+              <p className="text-sm text-muted-foreground">Total Points</p>
+            </div>
+            <Badge className={`${currentTier.color} text-white px-3 py-1`}>
+              {currentTier.tier === 'Bronze' && '🥉 '}
+              {currentTier.tier === 'Silver' && '🥈 '}
+              {currentTier.tier === 'Gold' && '🥇 '}
+              {currentTier.tier === 'Platinum' && '💎 '}
+              {currentTier.tier}
+            </Badge>
+          </div>
+
+          {!profile?.is_business && (
+            <>
+              <div className="flex items-center gap-2 p-3 bg-background rounded-lg">
+                <Percent className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="font-semibold text-green-700 dark:text-green-400">
+                    {currentTier.discount}% Discount
+                  </p>
+                  <p className="text-xs text-muted-foreground">At all registered businesses</p>
+                </div>
+              </div>
+
+              {nextTier && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Progress to {nextTier.tier}</span>
+                    <span className="font-medium">{nextTier.min - points} pts to go</span>
+                  </div>
+                  <Progress value={progressToNext} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Unlock {nextTier.discount}% discount at {nextTier.min} points
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-4 gap-2 text-center text-xs pt-2">
+                {discountTiers.slice(1).map((tier) => (
+                  <div key={tier.tier} className={`p-2 rounded ${points >= tier.min ? 'bg-primary/10' : 'bg-muted/50'}`}>
+                    <p className="font-medium">{tier.tier}</p>
+                    <p className="text-muted-foreground">{tier.discount}% off</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {profile?.is_business && (
+            <div className="p-3 bg-background rounded-lg">
+              <div className="flex items-center gap-2">
+                <Rocket className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium">Boost Your Posts</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use points to increase visibility on user feeds and AI recommendations
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
