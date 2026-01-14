@@ -11,6 +11,7 @@ import HomePage from "./pages/HomePage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ProfilePage from "./pages/ProfilePage";
 import GroupsPage from "./pages/GroupsPage";
+import GroupDetailPage from "./pages/GroupDetailPage";
 import BoardsPage from "./pages/BoardsPage";
 import FriendsPage from "./pages/FriendsPage";
 import MessagesPage from "./pages/MessagesPage";
@@ -40,6 +41,7 @@ const App = () => (
                 <Route path="/" element={<HomePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/groups" element={<GroupsPage />} />
+                <Route path="/groups/:groupId" element={<GroupDetailPage />} />
                 <Route path="/boards" element={<BoardsPage />} />
                 <Route path="/friends" element={<FriendsPage />} />
                 <Route path="/messages" element={<MessagesPage />} />

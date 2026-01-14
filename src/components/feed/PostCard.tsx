@@ -45,8 +45,25 @@ export function PostCard({ post }: PostCardProps) {
           user_id: user.id,
           post_id: post.id,
         });
+        
+        // Award point to post author for getting a like
+        if (post.user_id !== user.id) {
+          const { data: authorProfile } = await supabase
+            .from('profiles')
+            .select('points')
+            .eq('user_id', post.user_id)
+            .single();
+          
+          if (authorProfile) {
+            await supabase
+              .from('profiles')
+              .update({ points: (authorProfile.points || 0) + 1 })
+              .eq('user_id', post.user_id);
+          }
+        }
       }
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['group-posts'] });
     } catch (error) {
       toast({
         title: 'Error',
@@ -71,8 +88,25 @@ export function PostCard({ post }: PostCardProps) {
           user_id: user.id,
           post_id: post.id,
         });
+
+        // Award 2 points to post author for getting a helpful mark
+        if (post.user_id !== user.id) {
+          const { data: authorProfile } = await supabase
+            .from('profiles')
+            .select('points')
+            .eq('user_id', post.user_id)
+            .single();
+          
+          if (authorProfile) {
+            await supabase
+              .from('profiles')
+              .update({ points: (authorProfile.points || 0) + 2 })
+              .eq('user_id', post.user_id);
+          }
+        }
       }
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['group-posts'] });
     } catch (error) {
       toast({
         title: 'Error',

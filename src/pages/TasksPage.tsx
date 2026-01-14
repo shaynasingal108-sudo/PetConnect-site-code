@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, CheckCircle2, Circle, Star } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Star, Sparkles, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -9,6 +11,7 @@ export default function TasksPage() {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ['tasks', user?.id],
@@ -46,6 +49,42 @@ export default function TasksPage() {
     },
   });
 
+  const generateNewTasks = async () => {
+    if (!user || !profile?.pet_type) {
+      toast({
+        title: 'Pet info needed',
+        description: 'Please set your pet type in your profile first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-tasks', {
+        body: {
+          userId: user.id,
+          petType: profile.pet_type,
+          petBreed: profile.pet_breed,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({ title: 'New tasks generated!', description: 'Check out your personalized tasks.' });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    } catch (error: any) {
+      console.error('Error generating tasks:', error);
+      toast({
+        title: 'Could not generate tasks',
+        description: 'Please try again later.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -56,15 +95,6 @@ export default function TasksPage() {
 
   const pendingTasks = tasks?.filter((t: any) => !t.completed) || [];
   const completedTasks = tasks?.filter((t: any) => t.completed) || [];
-
-  // Show sample tasks if none exist
-  const sampleTasks = [
-    { id: 'sample1', title: `Walk your ${profile?.pet_type || 'pet'}`, description: 'Take a 15-minute walk', points: 2, completed: false },
-    { id: 'sample2', title: 'Share a photo', description: 'Post a cute photo of your pet', points: 3, completed: false },
-    { id: 'sample3', title: 'Help someone', description: 'Comment helpful advice on a post', points: 5, completed: false },
-  ];
-
-  const displayTasks = pendingTasks.length > 0 ? pendingTasks : sampleTasks;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -77,32 +107,76 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* Points Explanation */}
+      <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
+        <CardContent className="pt-4">
+          <h3 className="font-semibold mb-2 flex items-center gap-2">
+            <Star className="h-4 w-4 text-primary" /> How to Earn Points
+          </h3>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>✓ Complete daily tasks (1-5 points each)</li>
+            <li>✓ Get likes on your posts (+1 point each)</li>
+            <li>✓ Get comments on your posts (+1 point each)</li>
+            <li>✓ Get "Helpful" marks on posts (+2 points each)</li>
+            <li>✓ Have your posts saved by others (+1 point each)</li>
+            <li>✓ Update your AI Life (+2 points each entry)</li>
+          </ul>
+          {profile?.is_business ? (
+            <p className="text-xs text-primary mt-2">💼 As a business, use points to boost your posts!</p>
+          ) : (
+            <p className="text-xs text-primary mt-2">🎁 Earn points for discounts at pet businesses!</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Generate Tasks Button */}
+      <Button
+        onClick={generateNewTasks}
+        disabled={isGenerating}
+        variant="outline"
+        className="w-full gap-2"
+      >
+        {isGenerating ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
+        Generate AI Tasks for My {profile?.pet_type || 'Pet'}
+      </Button>
+
       <Card>
         <CardHeader>
           <CardTitle>Today's Tasks</CardTitle>
           <CardDescription>
-            Earn points by caring for your pet and helping the community
+            AI-generated tasks based on your {profile?.pet_type || 'pet'} care needs
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {displayTasks.map((task: any) => (
-            <button
-              key={task.id}
-              onClick={() => !task.id.startsWith('sample') && completeTask.mutate({ taskId: task.id, points: task.points })}
-              className="w-full flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors text-left"
-            >
-              <Circle className="h-6 w-6 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="font-semibold">{task.title}</p>
-                {task.description && (
-                  <p className="text-sm text-muted-foreground">{task.description}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-1 text-primary font-semibold">
-                +{task.points} <Star className="h-4 w-4" />
-              </div>
-            </button>
-          ))}
+          {pendingTasks.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <p>No pending tasks! Generate new ones with AI.</p>
+            </div>
+          ) : (
+            pendingTasks.map((task: any) => (
+              <button
+                key={task.id}
+                onClick={() => completeTask.mutate({ taskId: task.id, points: task.points || 2 })}
+                disabled={completeTask.isPending}
+                className="w-full flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
+              >
+                <Circle className="h-6 w-6 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate">{task.title}</p>
+                  {task.description && (
+                    <p className="text-sm text-muted-foreground truncate">{task.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 text-primary font-semibold flex-shrink-0">
+                  +{task.points || 2} <Star className="h-4 w-4" />
+                </div>
+              </button>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -112,17 +186,17 @@ export default function TasksPage() {
             <CardTitle>Completed</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {completedTasks.map((task: any) => (
+            {completedTasks.slice(0, 10).map((task: any) => (
               <div
                 key={task.id}
                 className="flex items-center gap-4 p-4 rounded-lg border bg-muted/30 opacity-60"
               >
-                <CheckCircle2 className="h-6 w-6 text-green-500" />
-                <div className="flex-1">
-                  <p className="font-semibold line-through">{task.title}</p>
+                <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold line-through truncate">{task.title}</p>
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground font-semibold">
-                  +{task.points} <Star className="h-4 w-4" />
+                <div className="flex items-center gap-1 text-muted-foreground font-semibold flex-shrink-0">
+                  +{task.points || 2} <Star className="h-4 w-4" />
                 </div>
               </div>
             ))}
