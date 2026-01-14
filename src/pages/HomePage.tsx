@@ -18,7 +18,7 @@ export default function HomePage() {
     }
   }, [user, profile, loading, navigate]);
 
-  const { data: posts, isLoading } = useQuery({
+  const { data: posts, isLoading, refetch } = useQuery({
     queryKey: ['posts', profile?.city],
     queryFn: async () => {
       const { data } = await supabase
@@ -30,6 +30,8 @@ export default function HomePage() {
       return data || [];
     },
     enabled: !!user,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   if (loading || isLoading) {

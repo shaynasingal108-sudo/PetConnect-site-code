@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function GroupsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
 
   const { data: groups, isLoading } = useQuery({
@@ -25,7 +26,7 @@ export default function GroupsPage() {
     },
   });
 
-  const { data: myMemberships } = useQuery({
+  const { data: myMemberships, refetch: refetchMemberships } = useQuery({
     queryKey: ['my-memberships', user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -38,20 +39,29 @@ export default function GroupsPage() {
   });
 
   const handleJoin = async (groupId: string, requiresApproval: boolean) => {
+    if (!user) return;
+
     const { error } = await supabase.from('group_memberships').insert({
       group_id: groupId,
-      user_id: user?.id,
+      user_id: user.id,
       status: requiresApproval ? 'pending' : 'approved',
       role: 'member',
     });
 
     if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      if (error.code === '23505') {
+        toast({ title: 'Already requested!', description: 'You have already requested to join this group.' });
+      } else {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      }
     } else {
       toast({ 
         title: requiresApproval ? 'Request Sent!' : 'Joined!', 
         description: requiresApproval ? 'Waiting for approval' : 'Welcome to the group!' 
       });
+      // Refetch memberships to update UI
+      refetchMemberships();
+      queryClient.invalidateQueries({ queryKey: ['my-memberships'] });
     }
   };
 
@@ -94,7 +104,9 @@ export default function GroupsPage() {
       <div className="grid gap-4">
         {filteredGroups?.length === 0 ? (
           <Card className="text-center py-8 text-muted-foreground">
-            <p>No groups found. Create one!</p>
+            <CardContent>
+              <p>No groups found. Create one!</p>
+            </CardContent>
           </Card>
         ) : (
           filteredGroups?.map((group: any) => {
