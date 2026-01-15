@@ -27,6 +27,25 @@ export default function BusinessesPage() {
     },
   });
 
+  // Fetch all ratings
+  const { data: allRatings } = useQuery({
+    queryKey: ['all-business-ratings'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('business_ratings')
+        .select('*');
+      return data || [];
+    },
+  });
+
+  // Calculate average rating for each business
+  const getBusinessRating = (businessUserId: string) => {
+    const businessRatings = allRatings?.filter((r: any) => r.business_id === businessUserId) || [];
+    if (businessRatings.length === 0) return null;
+    const avg = businessRatings.reduce((sum: number, r: any) => sum + r.rating, 0) / businessRatings.length;
+    return { average: avg.toFixed(1), count: businessRatings.length };
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -85,16 +104,30 @@ export default function BusinessesPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold">{biz.business_name || biz.username}</h3>
                       <Badge variant="secondary" className="text-xs">
                         <Star className="h-3 w-3 mr-1" />
                         {biz.points || 0}
                       </Badge>
                     </div>
-                    {biz.business_category && (
-                      <Badge variant="outline" className="mt-1">{biz.business_category}</Badge>
-                    )}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {biz.business_category && (
+                        <Badge variant="outline">{biz.business_category}</Badge>
+                      )}
+                      {(() => {
+                        const rating = getBusinessRating(biz.user_id);
+                        return rating ? (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span>{rating.average}</span>
+                            <span>({rating.count})</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No ratings yet</span>
+                        );
+                      })()}
+                    </div>
                     <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                       {biz.business_description || biz.bio || 'No description available'}
                     </p>
