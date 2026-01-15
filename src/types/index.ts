@@ -181,4 +181,12 @@ export interface Task {
   created_at: string;
 }
 
-export type ThemeColor = 'coral' | 'teal' | 'amber' | 'sage' | 'lavender' | 'rose';
+export type ThemeColor = 'teal' | 'amber' | 'sage' | 'lavender' | 'rose';
+
+export interface BusinessRating {
+  id: string;
+  business_id: string;
+  user_id: string;
+  rating: number;
+  created_at: string;
+}

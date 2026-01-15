@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, MessageCircle, Users, Bookmark, Palette, Flag, Store, Sparkles, Brain, UserPlus } from 'lucide-react';
+import { Bell, MessageCircle, Users, Bookmark, Palette, Flag, Store, Sparkles, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -17,7 +17,6 @@ import petsConnectLogo from '@/assets/petsconnect-logo.jpeg';
 
 
 const themeOptions: { color: ThemeColor; label: string; preview: string }[] = [
-  { color: 'coral', label: 'Coral', preview: 'bg-orange-500' },
   { color: 'teal', label: 'Teal', preview: 'bg-teal-500' },
   { color: 'amber', label: 'Amber', preview: 'bg-amber-500' },
   { color: 'sage', label: 'Sage', preview: 'bg-green-500' },
@@ -75,15 +74,9 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Link to="/quiz">
-              <Button variant="ghost" size="icon" className="relative">
-                <Sparkles className="h-5 w-5" />
-              </Button>
-            </Link>
-
             <Link to="/suggestions">
               <Button variant="ghost" size="icon" className="relative">
-                <Brain className="h-5 w-5" />
+                <Sparkles className="h-5 w-5" />
               </Button>
             </Link>
 

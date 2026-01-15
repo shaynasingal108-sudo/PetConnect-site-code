@@ -9,18 +9,21 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeColor, setThemeColor] = useState<ThemeColor>('coral');
+  const [themeColor, setThemeColor] = useState<ThemeColor>('teal');
 
   useEffect(() => {
-    const saved = localStorage.getItem('petsconnect-theme') as ThemeColor;
-    if (saved) {
-      setThemeColor(saved);
+    const saved = localStorage.getItem('petsconnect-theme');
+    if (saved && ['teal', 'amber', 'sage', 'lavender', 'rose'].includes(saved)) {
+      setThemeColor(saved as ThemeColor);
+    } else {
+      // Default to teal for new users or coral users
+      setThemeColor('teal');
     }
   }, []);
 
   useEffect(() => {
     document.documentElement.classList.remove(
-      'theme-coral', 'theme-teal', 'theme-amber', 
+      'theme-teal', 'theme-amber', 
       'theme-sage', 'theme-lavender', 'theme-rose'
     );
     document.documentElement.classList.add(`theme-${themeColor}`);

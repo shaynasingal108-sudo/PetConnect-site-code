@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Star, MapPin, Clock, MessageCircle, Percent, Gift } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface BusinessDetailDialogProps {
   business: any;
@@ -24,11 +28,124 @@ const getDiscountTier = (points: number) => {
 
 export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessDetailDialogProps) {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedRating, setSelectedRating] = useState<number>(0);
+  const [hoverRating, setHoverRating] = useState<number>(0);
 
   if (!business) return null;
 
   const userDiscount = profile ? getDiscountTier(profile.points || 0) : { discount: 0, tier: 'None' };
+
+  // Fetch ratings for this business
+  const { data: ratings } = useQuery({
+    queryKey: ['business-ratings', business.user_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('business_ratings')
+        .select('*')
+        .eq('business_id', business.user_id);
+      return data || [];
+    },
+    enabled: !!business.user_id && open,
+  });
+
+  // Check if current user has rated
+  const { data: userRating } = useQuery({
+    queryKey: ['user-business-rating', business.user_id, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('business_ratings')
+        .select('*')
+        .eq('business_id', business.user_id)
+        .eq('user_id', user?.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!business.user_id && !!user?.id && open,
+  });
+
+  useEffect(() => {
+    if (userRating) {
+      setSelectedRating(userRating.rating);
+    } else {
+      setSelectedRating(0);
+    }
+  }, [userRating]);
+
+  const submitRating = useMutation({
+    mutationFn: async (rating: number) => {
+      if (userRating) {
+        // Update existing rating
+        const { error } = await supabase
+          .from('business_ratings')
+          .update({ rating })
+          .eq('id', userRating.id);
+        if (error) throw error;
+      } else {
+        // Insert new rating
+        const { error } = await supabase
+          .from('business_ratings')
+          .insert({
+            business_id: business.user_id,
+            user_id: user?.id,
+            rating,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['business-ratings', business.user_id] });
+      queryClient.invalidateQueries({ queryKey: ['user-business-rating', business.user_id, user?.id] });
+      toast({ title: 'Rating submitted!', description: 'Thank you for your feedback.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const handleRatingClick = (rating: number) => {
+    if (!user) {
+      toast({ title: 'Please log in', description: 'You need to be logged in to rate businesses.', variant: 'destructive' });
+      return;
+    }
+    if (profile?.is_business) {
+      toast({ title: 'Cannot rate', description: 'Business accounts cannot rate other businesses.', variant: 'destructive' });
+      return;
+    }
+    setSelectedRating(rating);
+    submitRating.mutate(rating);
+  };
+
+  const handleContactBusiness = async () => {
+    if (!user) {
+      toast({ title: 'Please log in', description: 'You need to be logged in to message businesses.', variant: 'destructive' });
+      return;
+    }
+    
+    // Send initial message to the business
+    const { error } = await supabase.from('messages').insert({
+      sender_id: user.id,
+      receiver_id: business.user_id,
+      content: `Hi! I'm interested in your services at ${business.business_name}. I found you on PetsConnect!`,
+    });
+
+    if (error) {
+      toast({ title: 'Error', description: 'Could not send message.', variant: 'destructive' });
+    } else {
+      toast({ title: 'Message sent!', description: 'Check your messages to continue the conversation.' });
+      onOpenChange(false);
+      navigate('/messages');
+    }
+  };
+
+  // Calculate average rating
+  const averageRating = ratings && ratings.length > 0
+    ? (ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length).toFixed(1)
+    : null;
+
+  const ratingCount = ratings?.length || 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -57,6 +174,61 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
               </div>
             </div>
           </div>
+
+          {/* Average Rating Display */}
+          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  className={`h-5 w-5 ${
+                    averageRating && star <= Math.round(Number(averageRating))
+                      ? 'fill-yellow-400 text-yellow-400'
+                      : 'text-muted-foreground'
+                  }`}
+                />
+              ))}
+            </div>
+            <div>
+              {averageRating ? (
+                <p className="font-semibold">{averageRating} / 5 <span className="text-sm font-normal text-muted-foreground">({ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'})</span></p>
+              ) : (
+                <p className="text-muted-foreground text-sm">No ratings yet - be the first!</p>
+              )}
+            </div>
+          </div>
+
+          {/* User Rating */}
+          {user && !profile?.is_business && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Rate this business:</p>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => handleRatingClick(star)}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    className="p-1 transition-transform hover:scale-110"
+                    disabled={submitRating.isPending}
+                  >
+                    <Star
+                      className={`h-7 w-7 cursor-pointer transition-colors ${
+                        star <= (hoverRating || selectedRating)
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-muted-foreground hover:text-yellow-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              {selectedRating > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {userRating ? 'Your rating has been updated!' : 'Thanks for rating!'}
+                </p>
+              )}
+            </div>
+          )}
 
           <p className="text-muted-foreground">
             {business.business_description || business.bio || 'No description available'}
@@ -126,10 +298,7 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
 
           <div className="pt-4 border-t">
             <Button 
-              onClick={() => {
-                onOpenChange(false);
-                navigate('/messages');
-              }}
+              onClick={handleContactBusiness}
               className="w-full gradient-primary"
             >
               <MessageCircle className="h-4 w-4 mr-2" />
