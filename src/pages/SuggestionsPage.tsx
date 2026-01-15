@@ -57,7 +57,15 @@ export default function SuggestionsPage() {
   const { data: searchResults, isLoading: isSearching } = useQuery({
     queryKey: ['search-posts', searchQuery],
     queryFn: async () => {
-      if (!searchQuery.trim()) return [];
+      if (!searchQuery.trim()) {
+        // Show recent helpful posts when no search query
+        const { data } = await supabase
+          .from('posts')
+          .select('*, profiles(*)')
+          .order('helpful_count', { ascending: false })
+          .limit(5);
+        return data || [];
+      }
       const { data } = await supabase
         .from('posts')
         .select('*, profiles(*)')
@@ -65,7 +73,7 @@ export default function SuggestionsPage() {
         .limit(10);
       return data || [];
     },
-    enabled: searchQuery.length > 2,
+    enabled: true,
   });
 
   const handleQuizSubmit = async () => {
@@ -454,13 +462,21 @@ export default function SuggestionsPage() {
             />
           </div>
 
+          {!searchQuery.trim() && (
+            <p className="text-sm text-muted-foreground text-center mb-2">
+              💡 Try searching: "training", "cat", "grooming", "health"
+            </p>
+          )}
+
           {isSearching ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-          ) : searchResults?.length === 0 && searchQuery.length > 2 ? (
+          ) : searchResults?.length === 0 ? (
             <Card className="text-center py-8 text-muted-foreground">
-              <p>No posts found matching "{searchQuery}"</p>
+              <CardContent>
+                <p>No posts found{searchQuery ? ` matching "${searchQuery}"` : ''}</p>
+              </CardContent>
             </Card>
           ) : (
             searchResults?.map((post: any) => (
