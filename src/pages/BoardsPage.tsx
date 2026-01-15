@@ -36,7 +36,7 @@ export default function BoardsPage() {
   const { data: savedPosts, isLoading: isLoadingSavedPosts } = useQuery({
     queryKey: ['saved-posts', selectedBoard?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: savedData } = await supabase
         .from('saved_posts')
         .select(`
           *,
@@ -45,12 +45,30 @@ export default function BoardsPage() {
             content,
             image_url,
             created_at,
-            profiles:user_id (username, avatar_url)
+            user_id
           )
         `)
         .eq('board_id', selectedBoard?.id)
         .order('created_at', { ascending: false });
-      return data || [];
+      
+      if (!savedData || savedData.length === 0) return [];
+      
+      // Fetch profiles for post authors
+      const userIds = [...new Set(savedData.map((s: any) => s.posts?.user_id).filter(Boolean))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url')
+        .in('user_id', userIds);
+      
+      const profileMap = new Map(profiles?.map((p: any) => [p.user_id, p]) || []);
+      
+      return savedData.map((saved: any) => ({
+        ...saved,
+        posts: saved.posts ? {
+          ...saved.posts,
+          profile: profileMap.get(saved.posts.user_id) || null
+        } : null
+      }));
     },
     enabled: !!selectedBoard,
   });
@@ -147,15 +165,15 @@ export default function BoardsPage() {
                 <CardContent className="pt-4">
                   <div className="flex items-start gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={saved.posts?.profiles?.avatar_url} />
+                      <AvatarImage src={saved.posts?.profile?.avatar_url} />
                       <AvatarFallback>
-                        {saved.posts?.profiles?.username?.charAt(0) || '?'}
+                        {saved.posts?.profile?.username?.charAt(0) || '?'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <p className="font-semibold text-sm">
-                          {saved.posts?.profiles?.username || 'Unknown'}
+                          {saved.posts?.profile?.username || 'Unknown'}
                         </p>
                         <Button
                           variant="ghost"
