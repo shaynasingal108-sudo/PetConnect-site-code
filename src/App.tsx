@@ -18,7 +18,7 @@ import MessagesPage from "./pages/MessagesPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ReportPage from "./pages/ReportPage";
 import BusinessesPage from "./pages/BusinessesPage";
-import QuizPage from "./pages/QuizPage";
+
 import SuggestionsPage from "./pages/SuggestionsPage";
 import AILifePage from "./pages/AILifePage";
 import TasksPage from "./pages/TasksPage";
@@ -50,8 +50,8 @@ const App = () => (
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/report" element={<ReportPage />} />
                 <Route path="/businesses" element={<BusinessesPage />} />
-                <Route path="/quiz" element={<QuizPage />} />
                 <Route path="/suggestions" element={<SuggestionsPage />} />
+                <Route path="/quiz" element={<SuggestionsPage />} />
                 <Route path="/ai-life" element={<AILifePage />} />
                 <Route path="/tasks" element={<TasksPage />} />
               </Route>

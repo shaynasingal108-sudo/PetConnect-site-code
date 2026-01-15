@@ -42,7 +42,7 @@ serve(async (req) => {
       .limit(5);
 
     // Use AI to generate personalized recommendations
-    const aiResponse = await fetch('https://api.ai.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

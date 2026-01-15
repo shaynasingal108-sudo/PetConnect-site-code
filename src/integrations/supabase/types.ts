@@ -68,6 +68,30 @@ export type Database = {
         }
         Relationships: []
       }
+      business_ratings: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          rating: number
+          user_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          rating: number
+          user_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          rating?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string

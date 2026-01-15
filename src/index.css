@@ -126,12 +126,7 @@
     --sidebar-ring: 16 80% 55%;
   }
 
-  /* Theme variants - Sky blue as default */
-  .theme-coral {
-    --primary: 201 56% 87%;
-    --ring: 201 56% 87%;
-    --paw-coral: 201 56% 87%;
-  }
+  /* Theme variants - Teal as default */
 
   .theme-teal {
     --primary: 174 55% 45%;
