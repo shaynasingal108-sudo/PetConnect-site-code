@@ -3,30 +3,11 @@ import type { Comment, Post, Profile } from "@/types";
 
 type AnyRow = Record<string, any>;
 
-export async function fetchHydratedPosts({
-  groupId,
-  limit = 50,
-}: {
-  groupId: string | null;
-  limit?: number;
-}): Promise<Post[]> {
-  let query = supabase
-    .from("posts")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (groupId === null) query = query.is("group_id", null);
-  else query = query.eq("group_id", groupId);
-
-  const { data: postsRaw, error: postsError } = await query;
-  if (postsError) throw postsError;
-
+async function hydratePosts(postsRaw: AnyRow[]): Promise<Post[]> {
   const posts = (postsRaw || []) as AnyRow[];
   if (posts.length === 0) return [];
 
   const postIds = posts.map((p) => p.id);
-
   const authorUserIds = posts.map((p) => p.user_id);
 
   const [{ data: likes }, { data: helpfulMarks }, { data: commentsRaw }] = await Promise.all([
@@ -40,14 +21,15 @@ export async function fetchHydratedPosts({
   ]);
 
   const comments = (commentsRaw || []) as AnyRow[];
-
   const commentUserIds = comments.map((c) => c.user_id);
   const allUserIds = Array.from(new Set([...authorUserIds, ...commentUserIds]));
 
-  const { data: profilesRaw } = await supabase
+  const { data: profilesRaw, error: profilesError } = await supabase
     .from("profiles")
     .select("*")
     .in("user_id", allUserIds);
+
+  if (profilesError) throw profilesError;
 
   const profiles = (profilesRaw || []) as Profile[];
   const profileByUserId = new Map(profiles.map((p) => [p.user_id, p]));
@@ -87,4 +69,61 @@ export async function fetchHydratedPosts({
     };
     return hydrated;
   });
+}
+
+export async function fetchHydratedPosts({
+  groupId,
+  limit = 50,
+}: {
+  groupId: string | null;
+  limit?: number;
+}): Promise<Post[]> {
+  let query = supabase
+    .from("posts")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (groupId === null) query = query.is("group_id", null);
+  else query = query.eq("group_id", groupId);
+
+  const { data: postsRaw, error: postsError } = await query;
+  if (postsError) throw postsError;
+
+  return hydratePosts((postsRaw || []) as AnyRow[]);
+}
+
+export async function fetchHydratedHelpfulPosts({
+  limit = 5,
+}: {
+  limit?: number;
+}): Promise<Post[]> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("*")
+    .order("helpful_count", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return hydratePosts((data || []) as AnyRow[]);
+}
+
+export async function fetchHydratedPostsSearch({
+  query,
+  limit = 20,
+}: {
+  query: string;
+  limit?: number;
+}): Promise<Post[]> {
+  const q = query.trim();
+
+  const { data, error } = await supabase
+    .from("posts")
+    .select("*")
+    .ilike("content", `%${q}%`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return hydratePosts((data || []) as AnyRow[]);
 }
