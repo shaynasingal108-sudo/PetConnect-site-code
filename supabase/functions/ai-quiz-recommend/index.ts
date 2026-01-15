@@ -19,12 +19,15 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get groups that match the criteria
-    const { data: groups } = await supabase
+    // Get groups that match the criteria (exclude test groups)
+    const { data: allGroups } = await supabase
       .from('groups')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(20);
+    
+    // Filter out test/junk groups
+    const groups = allGroups?.filter(g => !['Hhhh', 'hhhh', 'HHHH'].includes(g.name?.trim())) || [];
 
     // Get relevant posts
     const { data: posts } = await supabase
