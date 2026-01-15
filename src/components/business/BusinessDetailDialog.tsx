@@ -34,36 +34,34 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
   const [selectedRating, setSelectedRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number>(0);
 
-  if (!business) return null;
-
-  const userDiscount = profile ? getDiscountTier(profile.points || 0) : { discount: 0, tier: 'None' };
+  const businessUserId = business?.user_id;
 
   // Fetch ratings for this business
   const { data: ratings } = useQuery({
-    queryKey: ['business-ratings', business.user_id],
+    queryKey: ['business-ratings', businessUserId],
     queryFn: async () => {
       const { data } = await supabase
         .from('business_ratings')
         .select('*')
-        .eq('business_id', business.user_id);
+        .eq('business_id', businessUserId);
       return data || [];
     },
-    enabled: !!business.user_id && open,
+    enabled: !!businessUserId && open,
   });
 
   // Check if current user has rated
   const { data: userRating } = useQuery({
-    queryKey: ['user-business-rating', business.user_id, user?.id],
+    queryKey: ['user-business-rating', businessUserId, user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from('business_ratings')
         .select('*')
-        .eq('business_id', business.user_id)
+        .eq('business_id', businessUserId)
         .eq('user_id', user?.id)
         .maybeSingle();
       return data;
     },
-    enabled: !!business.user_id && !!user?.id && open,
+    enabled: !!businessUserId && !!user?.id && open,
   });
 
   useEffect(() => {
@@ -73,6 +71,10 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
       setSelectedRating(0);
     }
   }, [userRating]);
+
+  const userDiscount = profile ? getDiscountTier(profile.points || 0) : { discount: 0, tier: 'None' };
+
+  if (!business) return null;
 
   const submitRating = useMutation({
     mutationFn: async (rating: number) => {
