@@ -80,11 +80,6 @@ export default function AILifePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-life-entries'] });
       toast({ title: 'Entry deleted!' });
-      setNewEntry('');
-      toast({ 
-        title: 'Entry added! +2 points 🎉', 
-        description: 'Your pet update has been recorded.' 
-      });
     },
   });
 
@@ -214,7 +209,8 @@ export default function AILifePage() {
               <img 
                 src={generatedImage} 
                 alt="AI Generated Pet" 
-                className="w-full rounded-lg max-h-96 object-cover"
+                className="w-full rounded-lg max-h-96 object-contain bg-muted"
+                loading="eager"
               />
             </div>
           )}
