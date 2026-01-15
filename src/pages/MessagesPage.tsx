@@ -198,31 +198,21 @@ export default function MessagesPage() {
                 <button
                   key={conv.partnerId}
                   onClick={() => setSelectedChat(conv.partnerId)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors ${
+                  className={`w-full flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors overflow-hidden ${
                     selectedChat === conv.partnerId ? 'bg-muted' : ''
                   }`}
                 >
-                  <Avatar>
+                  <Avatar className="h-8 w-8 flex-shrink-0">
                     <AvatarImage src={conv.partner?.avatar_url || undefined} />
-                    <AvatarFallback>
+                    <AvatarFallback className="text-xs">
                       {(conv.partner?.username || conv.partnerId).charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 text-left">
-                    <p className="font-semibold text-sm">
-                      {conv.partner?.is_business
-                        ? conv.partner?.business_name || conv.partner?.username
-                        : conv.partner?.username || 'User'}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {conv.lastMessage?.content || (conv.isFriend ? 'Start a chat' : 'No messages yet')}
-                    </p>
-                  </div>
-                  {conv.isFriend && (
-                    <span className="text-[10px] px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                      Friend
-                    </span>
-                  )}
+                  <span className="flex-1 text-left font-medium text-sm truncate">
+                    {conv.partner?.is_business
+                      ? conv.partner?.business_name || conv.partner?.username
+                      : conv.partner?.username || 'User'}
+                  </span>
                 </button>
               ))
             )}
