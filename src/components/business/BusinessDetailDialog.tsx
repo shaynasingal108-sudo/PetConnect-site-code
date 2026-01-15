@@ -35,6 +35,7 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
   const [hoverRating, setHoverRating] = useState<number>(0);
 
   const businessUserId = business?.user_id;
+  const businessName = business?.business_name;
 
   // Fetch ratings for this business
   const { data: ratings } = useQuery({
@@ -64,6 +65,35 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
     enabled: !!businessUserId && !!user?.id && open,
   });
 
+  const submitRating = useMutation({
+    mutationFn: async (rating: number) => {
+      if (userRating) {
+        const { error } = await supabase
+          .from('business_ratings')
+          .update({ rating })
+          .eq('id', userRating.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('business_ratings')
+          .insert({
+            business_id: businessUserId,
+            user_id: user?.id,
+            rating,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['business-ratings', businessUserId] });
+      queryClient.invalidateQueries({ queryKey: ['user-business-rating', businessUserId, user?.id] });
+      toast({ title: 'Rating submitted!', description: 'Thank you for your feedback.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
   useEffect(() => {
     if (userRating) {
       setSelectedRating(userRating.rating);
@@ -74,38 +104,15 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
 
   const userDiscount = profile ? getDiscountTier(profile.points || 0) : { discount: 0, tier: 'None' };
 
-  if (!business) return null;
+  // Calculate average rating
+  const averageRating = ratings && ratings.length > 0
+    ? (ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length).toFixed(1)
+    : null;
 
-  const submitRating = useMutation({
-    mutationFn: async (rating: number) => {
-      if (userRating) {
-        // Update existing rating
-        const { error } = await supabase
-          .from('business_ratings')
-          .update({ rating })
-          .eq('id', userRating.id);
-        if (error) throw error;
-      } else {
-        // Insert new rating
-        const { error } = await supabase
-          .from('business_ratings')
-          .insert({
-            business_id: business.user_id,
-            user_id: user?.id,
-            rating,
-          });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['business-ratings', business.user_id] });
-      queryClient.invalidateQueries({ queryKey: ['user-business-rating', business.user_id, user?.id] });
-      toast({ title: 'Rating submitted!', description: 'Thank you for your feedback.' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+  const ratingCount = ratings?.length || 0;
+
+  // Early return AFTER all hooks
+  if (!business) return null;
 
   const handleRatingClick = (rating: number) => {
     if (!user) {
@@ -126,11 +133,10 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
       return;
     }
     
-    // Send initial message to the business
     const { error } = await supabase.from('messages').insert({
       sender_id: user.id,
-      receiver_id: business.user_id,
-      content: `Hi! I'm interested in your services at ${business.business_name}. I found you on PetsConnect!`,
+      receiver_id: businessUserId,
+      content: `Hi! I'm interested in your services at ${businessName}. I found you on PetsConnect!`,
     });
 
     if (error) {
@@ -141,13 +147,6 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
       navigate('/messages');
     }
   };
-
-  // Calculate average rating
-  const averageRating = ratings && ratings.length > 0
-    ? (ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length).toFixed(1)
-    : null;
-
-  const ratingCount = ratings?.length || 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
