@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, UserPlus, Check, X, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { fetchFriendRows, fetchProfilesMapByUserIds, getOtherUserId } from '@/lib/social';
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -15,16 +16,35 @@ export default function FriendsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data: friends, isLoading } = useQuery({
-    queryKey: ['friends', user?.id],
+  // Ensure demo social data exists for new users.
+  const seedQuery = useQuery({
+    queryKey: ['seed-demo-social', user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('friends')
-        .select('*, friend:profiles!friends_friend_id_fkey(*), requester:profiles!friends_user_id_fkey(*)')
-        .or(`user_id.eq.${user?.id},friend_id.eq.${user?.id}`);
-      return data || [];
+      await supabase.functions.invoke('seed-demo-social');
+      return true;
     },
     enabled: !!user,
+    staleTime: Infinity,
+    retry: 1,
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['friends-page', user?.id],
+    queryFn: async () => {
+      const userId = user!.id;
+      const friendRows = await fetchFriendRows(userId);
+      const otherUserIds = friendRows.map((r) => getOtherUserId(r, userId));
+      const profilesMap = await fetchProfilesMapByUserIds(otherUserIds);
+
+      const rowsWithProfile = friendRows.map((r) => ({
+        ...r,
+        otherUserId: getOtherUserId(r, userId),
+        otherProfile: profilesMap[getOtherUserId(r, userId)] || null,
+      }));
+
+      return rowsWithProfile;
+    },
+    enabled: !!user && !seedQuery.isLoading,
   });
 
   const respondToRequest = useMutation({
@@ -33,20 +53,17 @@ export default function FriendsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      queryClient.invalidateQueries({ queryKey: ['friends-page'] });
       toast({ title: 'Updated!' });
     },
   });
 
-  const acceptedFriends = friends?.filter((f: any) => f.status === 'accepted') || [];
-  const pendingReceived = friends?.filter((f: any) => f.status === 'pending' && f.friend_id === user?.id) || [];
-  const pendingSent = friends?.filter((f: any) => f.status === 'pending' && f.user_id === user?.id) || [];
+  const friends = data || [];
+  const acceptedFriends = friends.filter((f: any) => f.status === 'accepted');
+  const pendingReceived = friends.filter((f: any) => f.status === 'pending' && f.friend_id === user?.id);
+  const pendingSent = friends.filter((f: any) => f.status === 'pending' && f.user_id === user?.id);
 
-  const getFriendProfile = (friendship: any) => {
-    return friendship.user_id === user?.id ? friendship.friend : friendship.requester;
-  };
-
-  if (isLoading) {
+  if (seedQuery.isLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -76,30 +93,33 @@ export default function FriendsPage() {
               <p>No friends yet. Start connecting!</p>
             </Card>
           ) : (
-            acceptedFriends.map((f: any) => {
-              const profile = getFriendProfile(f);
-              return (
-                <Card key={f.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={profile?.avatar_url} />
-                          <AvatarFallback>{profile?.username?.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{profile?.username}</p>
-                          <p className="text-sm text-muted-foreground">{profile?.city}</p>
-                        </div>
+            acceptedFriends.map((f: any) => (
+              <Card key={f.id}>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={f.otherProfile?.avatar_url || undefined} />
+                        <AvatarFallback>
+                          {(f.otherProfile?.username || 'U').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-semibold">{f.otherProfile?.username || 'User'}</p>
+                        <p className="text-sm text-muted-foreground">{f.otherProfile?.city}</p>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => navigate('/messages')}>
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => navigate('/messages', { state: { selectedUserId: f.otherUserId } })}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
 
@@ -115,10 +135,12 @@ export default function FriendsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar>
-                        <AvatarImage src={f.requester?.avatar_url} />
-                        <AvatarFallback>{f.requester?.username?.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={f.otherProfile?.avatar_url || undefined} />
+                        <AvatarFallback>
+                          {(f.otherProfile?.username || 'U').charAt(0).toUpperCase()}
+                        </AvatarFallback>
                       </Avatar>
-                      <p className="font-semibold">{f.requester?.username}</p>
+                      <p className="font-semibold">{f.otherProfile?.username || 'User'}</p>
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -154,11 +176,13 @@ export default function FriendsPage() {
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-3">
                     <Avatar>
-                      <AvatarImage src={f.friend?.avatar_url} />
-                      <AvatarFallback>{f.friend?.username?.charAt(0)}</AvatarFallback>
+                      <AvatarImage src={f.otherProfile?.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {(f.otherProfile?.username || 'U').charAt(0).toUpperCase()}
+                      </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-semibold">{f.friend?.username}</p>
+                      <p className="font-semibold">{f.otherProfile?.username || 'User'}</p>
                       <p className="text-xs text-muted-foreground">Pending approval</p>
                     </div>
                   </div>
