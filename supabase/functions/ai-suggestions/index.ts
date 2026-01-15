@@ -33,11 +33,13 @@ serve(async (req) => {
       .order('helpful_count', { ascending: false })
       .limit(5);
 
-    // Fetch relevant groups
-    const { data: groups } = await supabase
+    // Fetch relevant groups (exclude test groups)
+    const { data: allGroups } = await supabase
       .from('groups')
-      .select('name, description, tags')
-      .limit(5);
+      .select('id, name, description, tags')
+      .limit(10);
+    
+    const groups = allGroups?.filter(g => !['Hhhh', 'hhhh', 'HHHH'].includes(g.name?.trim())) || [];
 
     // Fetch businesses
     const { data: businesses } = await supabase
