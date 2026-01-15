@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MessageCircle, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,58 +9,171 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { fetchFriendRows, fetchProfilesMapByUserIds, getOtherUserId } from '@/lib/social';
+
+type MessageRow = {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  created_at: string;
+};
+
+type Conversation = {
+  partnerId: string;
+  partner: any | null;
+  isFriend: boolean;
+  lastMessage: MessageRow | null;
+  messages: MessageRow[];
+};
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
 
-  const { data: conversations, isLoading } = useQuery({
-    queryKey: ['conversations', user?.id],
+  // Seed demo friends/messages once per user so the inbox is never empty.
+  const seedQuery = useQuery({
+    queryKey: ['seed-demo-social', user?.id],
     queryFn: async () => {
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(*), receiver:profiles!messages_receiver_id_fkey(*)')
-        .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`)
-        .order('created_at', { ascending: false });
-      
-      // Group by conversation partner
-      const convMap = new Map();
-      messages?.forEach((msg: any) => {
-        const partnerId = msg.sender_id === user?.id ? msg.receiver_id : msg.sender_id;
-        const partner = msg.sender_id === user?.id ? msg.receiver : msg.sender;
-        if (!convMap.has(partnerId)) {
-          convMap.set(partnerId, { partner, lastMessage: msg, messages: [] });
-        }
-        convMap.get(partnerId).messages.push(msg);
-      });
-      
-      return Array.from(convMap.values());
+      await supabase.functions.invoke('seed-demo-social');
+      return true;
     },
     enabled: !!user,
+    staleTime: Infinity,
+    retry: 1,
+  });
+
+  const inboxQuery = useQuery({
+    queryKey: ['inbox', user?.id],
+    queryFn: async () => {
+      const userId = user!.id;
+
+      const [{ data: messages, error: messagesError }, friendRows] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('*')
+          .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+          .order('created_at', { ascending: false }),
+        fetchFriendRows(userId),
+      ]);
+
+      if (messagesError) throw messagesError;
+
+      const acceptedFriendRows = friendRows.filter((f) => f.status === 'accepted');
+      const friendIds = acceptedFriendRows.map((f) => getOtherUserId(f, userId));
+
+      const messagePartnerIds = (messages || []).map((m: any) =>
+        m.sender_id === userId ? m.receiver_id : m.sender_id,
+      );
+
+      const allPartnerIds = Array.from(new Set([...friendIds, ...messagePartnerIds]));
+      const profilesMap = await fetchProfilesMapByUserIds(allPartnerIds);
+
+      const convMap = new Map<string, Conversation>();
+
+      const ensure = (partnerId: string) => {
+        if (!convMap.has(partnerId)) {
+          convMap.set(partnerId, {
+            partnerId,
+            partner: profilesMap[partnerId] || null,
+            isFriend: false,
+            lastMessage: null,
+            messages: [],
+          });
+        }
+        return convMap.get(partnerId)!;
+      };
+
+      acceptedFriendRows.forEach((row) => {
+        const partnerId = getOtherUserId(row, userId);
+        ensure(partnerId).isFriend = true;
+      });
+
+      (messages || []).forEach((msg: any) => {
+        const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+        const conv = ensure(partnerId);
+        // messages are returned newest-first; first one we see is the lastMessage
+        if (!conv.lastMessage) conv.lastMessage = msg as MessageRow;
+        conv.messages.push(msg as MessageRow);
+      });
+
+      const conversations = Array.from(convMap.values()).sort((a, b) => {
+        const aTime = a.lastMessage ? new Date(a.lastMessage.created_at).getTime() : 0;
+        const bTime = b.lastMessage ? new Date(b.lastMessage.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
+
+      return { conversations, profilesMap };
+    },
+    enabled: !!user && !seedQuery.isLoading,
+  });
+
+  // Pre-select chat from navigation state or query params.
+  useEffect(() => {
+    const stateSelected = (location.state as any)?.selectedUserId as string | undefined;
+    const querySelected = searchParams.get('user') || undefined;
+    const target = stateSelected || querySelected;
+    if (target) setSelectedChat(target);
+  }, [location.state, searchParams]);
+
+  const conversations = inboxQuery.data?.conversations || [];
+
+  const selectedConversation = useMemo(
+    () => conversations.find((c) => c.partnerId === selectedChat) || null,
+    [conversations, selectedChat],
+  );
+
+  const selectedPartnerQuery = useQuery({
+    queryKey: ['profile-by-user-id', selectedChat],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url, city, is_business, business_name')
+        .eq('user_id', selectedChat)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!selectedChat && !selectedConversation?.partner,
+  });
+
+  const selectedPartner = selectedConversation?.partner || selectedPartnerQuery.data || null;
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      if (!newMessage.trim() || !selectedChat || !user) return;
+
+      const { error } = await supabase.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: selectedChat,
+        content: newMessage.trim(),
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setNewMessage('');
+      await queryClient.invalidateQueries({ queryKey: ['inbox', user?.id] });
+    },
   });
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !selectedChat) return;
-    
-    await supabase.from('messages').insert({
-      sender_id: user?.id,
-      receiver_id: selectedChat,
-      content: newMessage,
-    });
-    
-    setNewMessage('');
+    await sendMutation.mutateAsync();
   };
 
-  if (isLoading) {
+  if (seedQuery.isLoading || inboxQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
-
-  const selectedConversation = conversations?.find((c: any) => c.partner?.user_id === selectedChat);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -72,28 +186,43 @@ export default function MessagesPage() {
       <div className="grid md:grid-cols-3 gap-4 min-h-[60vh]">
         <Card className="md:col-span-1">
           <CardHeader>
-            <CardTitle className="text-lg">Conversations</CardTitle>
+            <CardTitle className="text-lg">People</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 p-2">
-            {conversations?.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No messages yet</p>
+            {conversations.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No conversations yet.
+              </p>
             ) : (
-              conversations?.map((conv: any) => (
+              conversations.map((conv) => (
                 <button
-                  key={conv.partner?.user_id}
-                  onClick={() => setSelectedChat(conv.partner?.user_id)}
+                  key={conv.partnerId}
+                  onClick={() => setSelectedChat(conv.partnerId)}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors ${
-                    selectedChat === conv.partner?.user_id ? 'bg-muted' : ''
+                    selectedChat === conv.partnerId ? 'bg-muted' : ''
                   }`}
                 >
                   <Avatar>
-                    <AvatarImage src={conv.partner?.avatar_url} />
-                    <AvatarFallback>{conv.partner?.username?.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={conv.partner?.avatar_url || undefined} />
+                    <AvatarFallback>
+                      {(conv.partner?.username || conv.partnerId).charAt(0).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
-                    <p className="font-semibold text-sm">{conv.partner?.username}</p>
-                    <p className="text-xs text-muted-foreground truncate">{conv.lastMessage?.content}</p>
+                    <p className="font-semibold text-sm">
+                      {conv.partner?.is_business
+                        ? conv.partner?.business_name || conv.partner?.username
+                        : conv.partner?.username || 'User'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {conv.lastMessage?.content || (conv.isFriend ? 'Start a chat' : 'No messages yet')}
+                    </p>
                   </div>
+                  {conv.isFriend && (
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                      Friend
+                    </span>
+                  )}
                 </button>
               ))
             )}
@@ -101,38 +230,55 @@ export default function MessagesPage() {
         </Card>
 
         <Card className="md:col-span-2 flex flex-col">
-          {selectedChat && selectedConversation ? (
+          {selectedChat ? (
             <>
               <CardHeader className="border-b">
                 <div className="flex items-center gap-3">
                   <Avatar>
-                    <AvatarImage src={selectedConversation.partner?.avatar_url} />
-                    <AvatarFallback>{selectedConversation.partner?.username?.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={selectedPartner?.avatar_url || undefined} />
+                    <AvatarFallback>
+                      {(selectedPartner?.username || selectedChat).charAt(0).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
-                  <CardTitle className="text-lg">{selectedConversation.partner?.username}</CardTitle>
+                  <CardTitle className="text-lg">
+                    {selectedPartner?.is_business
+                      ? selectedPartner?.business_name || selectedPartner?.username
+                      : selectedPartner?.username || 'Conversation'}
+                  </CardTitle>
                 </div>
               </CardHeader>
+
               <CardContent className="flex-1 overflow-y-auto p-4 space-y-3">
-                {selectedConversation.messages?.reverse().map((msg: any) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
-                  >
+                {(selectedConversation?.messages || [])
+                  .slice()
+                  .reverse()
+                  .map((msg) => (
                     <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        msg.sender_id === user?.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
+                      key={msg.id}
+                      className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
                     >
-                      <p>{msg.content}</p>
-                      <p className="text-xs opacity-70 mt-1">
-                        {format(new Date(msg.created_at), 'HH:mm')}
-                      </p>
+                      <div
+                        className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                          msg.sender_id === user?.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <p>{msg.content}</p>
+                        <p className="text-xs opacity-70 mt-1">
+                          {format(new Date(msg.created_at), 'HH:mm')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+
+                {selectedConversation?.messages?.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No messages yet — say hi!
+                  </p>
+                )}
               </CardContent>
+
               <div className="p-4 border-t flex gap-2">
                 <Input
                   placeholder="Type a message..."
@@ -140,14 +286,14 @@ export default function MessagesPage() {
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
-                <Button onClick={handleSend} className="gradient-primary">
+                <Button onClick={handleSend} className="gradient-primary" disabled={sendMutation.isPending}>
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              Select a conversation to start messaging
+              Select a friend or conversation to start messaging
             </div>
           )}
         </Card>

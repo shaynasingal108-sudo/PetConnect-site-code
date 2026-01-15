@@ -132,7 +132,7 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
       toast({ title: 'Please log in', description: 'You need to be logged in to message businesses.', variant: 'destructive' });
       return;
     }
-    
+
     const { error } = await supabase.from('messages').insert({
       sender_id: user.id,
       receiver_id: businessUserId,
@@ -144,7 +144,7 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
     } else {
       toast({ title: 'Message sent!', description: 'Check your messages to continue the conversation.' });
       onOpenChange(false);
-      navigate('/messages');
+      navigate('/messages', { state: { selectedUserId: businessUserId } });
     }
   };
 
