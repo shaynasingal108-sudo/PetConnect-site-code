@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, User, Save, Camera, Star, Gift, Percent, Rocket } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, User, Save, Camera, Star, Gift, Percent, Rocket, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,11 +11,19 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { formatDistanceToNow } from 'date-fns';
 
 const petTypes = ['Dog', 'Cat', 'Bird', 'Fish', 'Rabbit', 'Hamster', 'Other'];
+
+const boostOptions = [
+  { points: 10, hours: 2, level: 1, reach: '2 Hours', description: 'Top post for 2 hours' },
+  { points: 25, hours: 6, level: 2, reach: '6 Hours', description: 'Top post for 6 hours' },
+  { points: 50, hours: 24, level: 3, reach: '24 Hours', description: 'Top post for a full day' },
+];
 const genders = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 
 // Discount tiers
@@ -37,9 +45,13 @@ const getNextTier = (points: number) => {
 };
 
 export default function ProfilePage() {
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [boostDialogOpen, setBoostDialogOpen] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedBoost, setSelectedBoost] = useState(0);
+  const [isBoostLoading, setIsBoostLoading] = useState(false);
   
   const [formData, setFormData] = useState({
     username: profile?.username || '',
@@ -55,6 +67,82 @@ export default function ProfilePage() {
     business_description: profile?.business_description || '',
     business_years: profile?.business_years || 0,
   });
+
+  // Fetch user's posts for business accounts
+  const { data: myPosts } = useQuery({
+    queryKey: ['my-posts', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id && profile?.is_business,
+  });
+
+  const handleBoostPost = async () => {
+    if (!profile || !selectedPostId) return;
+    
+    const selectedOption = boostOptions[selectedBoost];
+    const currentPoints = profile.points || 0;
+    
+    if (currentPoints < selectedOption.points) {
+      toast({
+        title: 'Not enough points',
+        description: `You need ${selectedOption.points} points to use this boost.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsBoostLoading(true);
+    try {
+      const boostUntil = new Date();
+      boostUntil.setHours(boostUntil.getHours() + selectedOption.hours);
+
+      const { error: postError } = await supabase
+        .from('posts')
+        .update({ 
+          boost_until: boostUntil.toISOString(),
+          boost_level: selectedOption.level 
+        })
+        .eq('id', selectedPostId);
+
+      if (postError) throw postError;
+
+      const newPoints = currentPoints - selectedOption.points;
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ points: newPoints })
+        .eq('id', profile.id);
+
+      if (profileError) throw profileError;
+      
+      await refreshProfile();
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['my-posts'] });
+      
+      toast({
+        title: 'Post Boosted! 🚀',
+        description: `Your post will be at the top for ${selectedOption.hours} hours. ${selectedOption.points} points used.`,
+      });
+      
+      setBoostDialogOpen(false);
+      setSelectedPostId(null);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBoostLoading(false);
+    }
+  };
 
   const updateProfile = useMutation({
     mutationFn: async () => {
@@ -167,6 +255,136 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* My Posts Section for Business Accounts */}
+      {profile?.is_business && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Rocket className="h-5 w-5" /> Boost Your Posts
+            </CardTitle>
+            <CardDescription>
+              Select a post to boost it to the top of users' feeds
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {myPosts && myPosts.length > 0 ? (
+              myPosts.map((post: any) => {
+                const isBoosted = post.boost_until && new Date(post.boost_until) > new Date();
+                return (
+                  <div 
+                    key={post.id} 
+                    className={`p-3 rounded-lg border ${isBoosted ? 'border-primary bg-primary/5' : 'border-border'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm line-clamp-2">{post.content}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                      {isBoosted ? (
+                        <Badge variant="default" className="shrink-0 bg-primary/90">
+                          <Rocket className="h-3 w-3 mr-1" />
+                          Boosted
+                        </Badge>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => {
+                            setSelectedPostId(post.id);
+                            setSelectedBoost(0);
+                            setBoostDialogOpen(true);
+                          }}
+                        >
+                          <Rocket className="h-3 w-3 mr-1" />
+                          Boost
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No posts yet. Create a post to start boosting!
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Boost Dialog */}
+      <Dialog open={boostDialogOpen} onOpenChange={setBoostDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Rocket className="h-5 w-5 text-primary" /> Boost Your Post
+            </DialogTitle>
+            <DialogDescription>
+              Use your points to make this post appear at the top of feeds
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Your Points</p>
+              <p className="text-3xl font-bold text-primary">{points}</p>
+            </div>
+
+            <div className="space-y-4">
+              {boostOptions.map((option, index) => (
+                <div
+                  key={index}
+                  onClick={() => setSelectedBoost(index)}
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedBoost === index
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  } ${points < option.points ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-full ${selectedBoost === index ? 'bg-primary/20' : 'bg-muted'}`}>
+                        <Sparkles className={`h-4 w-4 ${selectedBoost === index ? 'text-primary' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{option.reach}</p>
+                        <p className="text-xs text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-primary">{option.points}</p>
+                      <p className="text-xs text-muted-foreground">points</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              onClick={handleBoostPost}
+              disabled={isBoostLoading || points < boostOptions[selectedBoost].points}
+              className="w-full gradient-primary"
+            >
+              {isBoostLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Rocket className="h-4 w-4 mr-2" />
+              )}
+              Boost for {boostOptions[selectedBoost].points} Points
+            </Button>
+
+            {points < boostOptions[selectedBoost].points && (
+              <p className="text-xs text-center text-destructive">
+                You need {boostOptions[selectedBoost].points - points} more points for this boost
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
