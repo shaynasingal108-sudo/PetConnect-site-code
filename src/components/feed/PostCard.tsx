@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, Bookmark, ThumbsUp, UserPlus, Rocket } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, ThumbsUp, UserPlus, Rocket, Building2 } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,8 @@ export function PostCard({ post }: PostCardProps) {
 
   const isOwnPost = user?.id === post.user_id;
   const isBusinessAccount = profile?.is_business;
+  const isPostFromBusiness = post.profiles?.is_business;
+  const isBoosted = post.boost_until && new Date(post.boost_until) > new Date();
 
   const isLiked = post.likes?.some(like => like.user_id === user?.id);
   const isHelpful = post.helpful_marks?.some(mark => mark.user_id === user?.id);
@@ -155,20 +157,34 @@ export function PostCard({ post }: PostCardProps) {
   };
 
   return (
-    <Card className="shadow-card animate-fade-in overflow-hidden">
+    <Card className={`shadow-card animate-fade-in overflow-hidden ${isBoosted ? 'ring-2 ring-primary/30 bg-primary/5' : ''}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <Link to={`/profile/${post.user_id}`} className="flex items-center gap-3 group">
             <Avatar className="h-10 w-10 border-2 border-primary/10 group-hover:border-primary/30 transition-colors">
-              <AvatarImage src={post.profiles?.avatar_url} />
+              <AvatarImage src={post.profiles?.avatar_url || post.profiles?.business_logo} />
               <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                 {post.profiles?.username?.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-semibold text-sm group-hover:text-primary transition-colors">
-                {post.profiles?.username}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-sm group-hover:text-primary transition-colors">
+                  {isPostFromBusiness ? post.profiles?.business_name || post.profiles?.username : post.profiles?.username}
+                </p>
+                {isPostFromBusiness && (
+                  <Badge variant="secondary" className="text-xs py-0 px-1.5 gap-1">
+                    <Building2 className="h-3 w-3" />
+                    Business
+                  </Badge>
+                )}
+                {isBoosted && (
+                  <Badge variant="default" className="text-xs py-0 px-1.5 gap-1 bg-primary/90">
+                    <Rocket className="h-3 w-3" />
+                    Promoted
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                 {post.city && ` · ${post.city}`}

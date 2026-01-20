@@ -21,9 +21,9 @@ interface BoostPostDialogProps {
 }
 
 const boostOptions = [
-  { points: 10, reach: '2x', description: 'Double your post visibility' },
-  { points: 25, reach: '5x', description: 'Reach 5x more users' },
-  { points: 50, reach: '10x', description: 'Maximum visibility boost' },
+  { points: 10, hours: 2, level: 1, reach: '2 Hours', description: 'Top post for 2 hours' },
+  { points: 25, hours: 6, level: 2, reach: '6 Hours', description: 'Top post for 6 hours' },
+  { points: 50, hours: 24, level: 3, reach: '24 Hours', description: 'Top post for a full day' },
 ];
 
 export function BoostPostDialog({ postId, open, onOpenChange }: BoostPostDialogProps) {
@@ -48,24 +48,37 @@ export function BoostPostDialog({ postId, open, onOpenChange }: BoostPostDialogP
 
     setIsLoading(true);
     try {
+      // Calculate boost end time
+      const boostUntil = new Date();
+      boostUntil.setHours(boostUntil.getHours() + selectedOption.hours);
+
+      // Update post with boost info
+      const { error: postError } = await supabase
+        .from('posts')
+        .update({ 
+          boost_until: boostUntil.toISOString(),
+          boost_level: selectedOption.level 
+        })
+        .eq('id', postId);
+
+      if (postError) throw postError;
+
       // Deduct points
       const newPoints = currentPoints - selectedOption.points;
-      const { error } = await supabase
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({ points: newPoints })
         .eq('id', profile.id);
 
-      if (error) throw error;
-
-      // In a real app, you'd also update the post with boost metadata
-      // For now, we'll just show success
+      if (profileError) throw profileError;
       
       await refreshProfile();
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['group-posts'] });
       
       toast({
         title: 'Post Boosted! 🚀',
-        description: `Your post will reach ${selectedOption.reach} more users. ${selectedOption.points} points used.`,
+        description: `Your post will be at the top for ${selectedOption.hours} hours. ${selectedOption.points} points used.`,
       });
       
       onOpenChange(false);

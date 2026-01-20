@@ -34,6 +34,8 @@ export interface Post {
   city?: string;
   helpful_count: number;
   group_id?: string;
+  boost_until?: string;
+  boost_level?: number;
   created_at: string;
   updated_at: string;
   profiles?: Profile;
