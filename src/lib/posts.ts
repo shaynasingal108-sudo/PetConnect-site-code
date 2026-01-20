@@ -81,7 +81,6 @@ export async function fetchHydratedPosts({
   let query = supabase
     .from("posts")
     .select("*")
-    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (groupId === null) query = query.is("group_id", null);
@@ -90,7 +89,29 @@ export async function fetchHydratedPosts({
   const { data: postsRaw, error: postsError } = await query;
   if (postsError) throw postsError;
 
-  return hydratePosts((postsRaw || []) as AnyRow[]);
+  // Sort posts: boosted posts first (if boost is still active), then by created_at
+  const now = new Date().toISOString();
+  const sortedPosts = (postsRaw || []).sort((a: AnyRow, b: AnyRow) => {
+    const aIsBoosted = a.boost_until && a.boost_until > now;
+    const bIsBoosted = b.boost_until && b.boost_until > now;
+    
+    // If both are boosted, sort by boost level (higher first), then by created_at
+    if (aIsBoosted && bIsBoosted) {
+      if ((b.boost_level || 0) !== (a.boost_level || 0)) {
+        return (b.boost_level || 0) - (a.boost_level || 0);
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    
+    // Boosted posts come first
+    if (aIsBoosted && !bIsBoosted) return -1;
+    if (!aIsBoosted && bIsBoosted) return 1;
+    
+    // Non-boosted posts sorted by created_at
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  return hydratePosts(sortedPosts as AnyRow[]);
 }
 
 export async function fetchHydratedHelpfulPosts({

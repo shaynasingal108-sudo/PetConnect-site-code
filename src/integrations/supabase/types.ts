@@ -393,6 +393,8 @@ export type Database = {
       }
       posts: {
         Row: {
+          boost_level: number | null
+          boost_until: string | null
           city: string | null
           content: string
           created_at: string
@@ -405,6 +407,8 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          boost_level?: number | null
+          boost_until?: string | null
           city?: string | null
           content: string
           created_at?: string
@@ -417,6 +421,8 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          boost_level?: number | null
+          boost_until?: string | null
           city?: string | null
           content?: string
           created_at?: string
