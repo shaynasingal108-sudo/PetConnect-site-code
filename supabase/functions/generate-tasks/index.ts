@@ -22,64 +22,92 @@ serve(async (req) => {
       );
     }
 
-    // Use AI to generate personalized tasks
-    const response = await fetch('https://api.ai.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a pet care expert. Generate 3-5 daily tasks for a ${petType}${petBreed ? ` (${petBreed})` : ''} owner. Each task should be helpful for pet care and community engagement. Return JSON array with objects containing: title, description, points (1-5 based on effort).`
-          },
-          {
-            role: 'user',
-            content: `Generate daily care tasks for my ${petType}${petBreed ? ` (${petBreed})` : ''}. Include a mix of pet care activities and community engagement tasks like posting or helping others.`
-          }
-        ],
-      }),
-    });
-
-    const aiData = await response.json();
-    let tasks = [];
-    
-    try {
-      const content = aiData.choices?.[0]?.message?.content || '[]';
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      tasks = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-    } catch {
-      // Fallback tasks
-      tasks = [
-        { title: `Walk your ${petType}`, description: 'Take a 15-minute walk outside', points: 2 },
-        { title: 'Post a photo', description: 'Share a cute moment with the community', points: 3 },
-        { title: 'Help a fellow pet owner', description: 'Comment helpful advice on a post', points: 5 },
-        { title: 'Update AI Life', description: 'Log an update about your pet', points: 2 },
-      ];
-    }
-
-    // Insert tasks into database
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const tasksToInsert = tasks.map((task: any) => ({
+    // Check if user already generated tasks today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const { data: existingTasks, error: checkError } = await supabase
+      .from('tasks')
+      .select('id, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', today.toISOString())
+      .limit(1);
+    
+    if (checkError) {
+      console.error('Error checking existing tasks:', checkError);
+      throw checkError;
+    }
+
+    if (existingTasks && existingTasks.length > 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'You already generated tasks today! Come back tomorrow for new tasks.',
+          alreadyGenerated: true 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Generate social engagement tasks - 5 tasks worth 1 point each = 5 total
+    const socialTasks = [
+      { 
+        title: 'Get 2 likes on your posts', 
+        description: 'Share something fun about your ' + petType + ' to earn likes from the community',
+        points: 1,
+        task_type: 'likes',
+        target_count: 2
+      },
+      { 
+        title: 'Get 1 save on your posts', 
+        description: 'Post something helpful that others want to save for later',
+        points: 1,
+        task_type: 'saves',
+        target_count: 1
+      },
+      { 
+        title: 'Get 1 helpful mark', 
+        description: 'Share advice or tips that help fellow ' + petType + ' owners',
+        points: 1,
+        task_type: 'helpful',
+        target_count: 1
+      },
+      { 
+        title: 'Get 2 comments on your posts', 
+        description: 'Start a conversation about ' + (petBreed || petType) + ' care',
+        points: 1,
+        task_type: 'comments',
+        target_count: 2
+      },
+      { 
+        title: 'Create a new post', 
+        description: 'Share a moment, tip, or question with the community',
+        points: 1,
+        task_type: 'post',
+        target_count: 1
+      }
+    ];
+
+    // Insert tasks into database
+    const tasksToInsert = socialTasks.map((task) => ({
       user_id: userId,
       title: task.title,
       description: task.description,
-      points: task.points || 2,
+      points: task.points,
       completed: false,
     }));
 
-    const { error } = await supabase.from('tasks').insert(tasksToInsert);
+    const { error: insertError } = await supabase.from('tasks').insert(tasksToInsert);
     
-    if (error) {
-      console.error('Error inserting tasks:', error);
-      throw error;
+    if (insertError) {
+      console.error('Error inserting tasks:', insertError);
+      throw insertError;
     }
+
+    console.log(`Generated ${tasksToInsert.length} tasks for user ${userId}`);
 
     return new Response(
       JSON.stringify({ success: true, tasks: tasksToInsert }),
