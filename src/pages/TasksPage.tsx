@@ -49,11 +49,26 @@ export default function TasksPage() {
     },
   });
 
+  // Check if tasks were already generated today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todaysTasks = tasks?.filter((t: any) => new Date(t.created_at) >= today) || [];
+  const hasGeneratedToday = todaysTasks.length > 0;
+
   const generateNewTasks = async () => {
     if (!user || !profile?.pet_type) {
       toast({
         title: 'Pet info needed',
         description: 'Please set your pet type in your profile first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (hasGeneratedToday) {
+      toast({
+        title: 'Already generated today!',
+        description: 'Come back tomorrow for new daily tasks.',
         variant: 'destructive',
       });
       return;
@@ -70,14 +85,24 @@ export default function TasksPage() {
       });
 
       if (error) throw error;
+      
+      // Check for already generated error from backend
+      if (data?.alreadyGenerated) {
+        toast({
+          title: 'Already generated today!',
+          description: 'Come back tomorrow for new daily tasks.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
-      toast({ title: 'New tasks generated!', description: 'Check out your personalized tasks.' });
+      toast({ title: '5 Daily Tasks Generated!', description: 'Complete them to earn 5 points!' });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     } catch (error: any) {
       console.error('Error generating tasks:', error);
       toast({
         title: 'Could not generate tasks',
-        description: 'Please try again later.',
+        description: error?.message || 'Please try again later.',
         variant: 'destructive',
       });
     } finally {
@@ -132,16 +157,20 @@ export default function TasksPage() {
       {/* Generate Tasks Button */}
       <Button
         onClick={generateNewTasks}
-        disabled={isGenerating}
+        disabled={isGenerating || hasGeneratedToday}
         variant="outline"
         className="w-full gap-2"
       >
         {isGenerating ? (
           <Loader2 className="h-4 w-4 animate-spin" />
+        ) : hasGeneratedToday ? (
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
         ) : (
           <Sparkles className="h-4 w-4" />
         )}
-        Generate AI Tasks for My {profile?.pet_type || 'Pet'}
+        {hasGeneratedToday
+          ? 'Tasks Generated Today ✓'
+          : `Generate AI Tasks for My ${profile?.pet_type || 'Pet'}`}
       </Button>
 
       <Card>
