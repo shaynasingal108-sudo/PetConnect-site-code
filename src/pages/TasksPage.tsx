@@ -26,6 +26,14 @@ export default function TasksPage() {
     enabled: !!user,
   });
 
+  // Check if all today's tasks are completed (for bonus)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todaysTasks = tasks?.filter((t: any) => new Date(t.created_at) >= today) || [];
+  const todaysPendingTasks = todaysTasks.filter((t: any) => !t.completed);
+  const todaysCompletedTasks = todaysTasks.filter((t: any) => t.completed);
+  const hasGeneratedToday = todaysTasks.length > 0;
+
   const completeTask = useMutation({
     mutationFn: async ({ taskId, points }: { taskId: string; points: number }) => {
       // Mark task as completed
@@ -35,25 +43,38 @@ export default function TasksPage() {
         .eq('id', taskId);
       if (taskError) throw taskError;
 
-      // Add points to profile
+      // Check if this is the last task being completed today (for bonus)
+      const remainingTasks = todaysPendingTasks.filter((t: any) => t.id !== taskId);
+      const isLastTask = remainingTasks.length === 0 && todaysTasks.length >= 5;
+      const bonusPoints = isLastTask ? 3 : 0;
+      const totalPoints = points + bonusPoints;
+
+      // Add points to profile (including bonus if applicable)
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ points: (profile?.points || 0) + points })
+        .update({ points: (profile?.points || 0) + totalPoints })
         .eq('id', profile?.id);
       if (profileError) throw profileError;
+
+      return { bonusPoints, totalPoints };
     },
-    onSuccess: async (_, { points }) => {
+    onSuccess: async (result, { points }) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       await refreshProfile();
-      toast({ title: 'Task Completed!', description: `You earned ${points} points! 🎉` });
+      
+      if (result?.bonusPoints && result.bonusPoints > 0) {
+        toast({ 
+          title: '🎉 All Tasks Completed!', 
+          description: `You earned ${points} + ${result.bonusPoints} bonus points! Total: ${result.totalPoints} points!` 
+        });
+      } else {
+        toast({ title: 'Task Completed!', description: `You earned ${points} points! 🎉` });
+      }
     },
   });
 
-  // Check if tasks were already generated today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todaysTasks = tasks?.filter((t: any) => new Date(t.created_at) >= today) || [];
-  const hasGeneratedToday = todaysTasks.length > 0;
+  // Show bonus progress
+  const allTasksCompleted = hasGeneratedToday && todaysPendingTasks.length === 0 && todaysCompletedTasks.length >= 5;
 
   const generateNewTasks = async () => {
     if (!user || !profile?.pet_type) {
@@ -131,6 +152,35 @@ export default function TasksPage() {
           <span className="font-semibold">{profile?.points || 0} points</span>
         </div>
       </div>
+
+      {/* Bonus Progress */}
+      {hasGeneratedToday && (
+        <Card className={`border-2 ${allTasksCompleted ? 'border-green-500 bg-green-500/10' : 'border-primary/30'}`}>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className={`h-5 w-5 ${allTasksCompleted ? 'text-green-500' : 'text-primary'}`} />
+                <span className="font-semibold">
+                  {allTasksCompleted ? 'Bonus Earned!' : 'Complete All Tasks Bonus'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {todaysCompletedTasks.length}/{todaysTasks.length} completed
+                </span>
+                <span className={`font-bold ${allTasksCompleted ? 'text-green-500' : 'text-primary'}`}>
+                  +3 <Star className="h-4 w-4 inline" />
+                </span>
+              </div>
+            </div>
+            {!allTasksCompleted && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Complete all 5 daily tasks to earn 3 bonus points!
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Points Explanation */}
       <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">

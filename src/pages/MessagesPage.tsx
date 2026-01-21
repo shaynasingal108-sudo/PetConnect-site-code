@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, MessageCircle, Send } from 'lucide-react';
+import { Loader2, MessageCircle, Send, Ticket, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { fetchFriendRows, fetchProfilesMapByUserIds, getOtherUserId } from '@/lib/social';
+import { useToast } from '@/hooks/use-toast';
 
 type MessageRow = {
   id: string;
@@ -27,14 +29,25 @@ type Conversation = {
   messages: MessageRow[];
 };
 
+// Discount tiers based on points
+const discountTiers = [
+  { points: 10, discount: '5%', label: 'Bronze Discount' },
+  { points: 25, discount: '10%', label: 'Silver Discount' },
+  { points: 50, discount: '15%', label: 'Gold Discount' },
+  { points: 100, discount: '25%', label: 'Platinum Discount' },
+];
+
 export default function MessagesPage() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
+  const [isRedeemingDiscount, setIsRedeemingDiscount] = useState(false);
 
   // Seed demo friends/messages once per user so the inbox is never empty.
   const seedQuery = useQuery({
@@ -167,6 +180,56 @@ export default function MessagesPage() {
     await sendMutation.mutateAsync();
   };
 
+  // Get available discounts based on user's points
+  const userPoints = profile?.points || 0;
+  const availableDiscounts = discountTiers.filter(tier => userPoints >= tier.points);
+  const bestDiscount = availableDiscounts[availableDiscounts.length - 1];
+
+  const handleRedeemDiscount = async (tier: typeof discountTiers[0]) => {
+    if (!user || !profile || !selectedPartner) return;
+    
+    setIsRedeemingDiscount(true);
+    try {
+      // Deduct points
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ points: userPoints - tier.points })
+        .eq('id', profile.id);
+      
+      if (profileError) throw profileError;
+
+      // Send discount message in chat
+      const businessName = selectedPartner.business_name || selectedPartner.username;
+      const discountMessage = `🎟️ DISCOUNT REDEEMED!\n\n${tier.label}: ${tier.discount} OFF\nBusiness: ${businessName}\nPoints Used: ${tier.points}\n\nShow this message to redeem your discount!`;
+      
+      const { error: msgError } = await supabase.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: selectedChat,
+        content: discountMessage,
+      });
+      
+      if (msgError) throw msgError;
+
+      await refreshProfile();
+      await queryClient.invalidateQueries({ queryKey: ['inbox', user?.id] });
+      setDiscountDialogOpen(false);
+      
+      toast({
+        title: 'Discount Redeemed! 🎉',
+        description: `You got ${tier.discount} off at ${businessName}!`,
+      });
+    } catch (error) {
+      console.error('Error redeeming discount:', error);
+      toast({
+        title: 'Could not redeem discount',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRedeemingDiscount(false);
+    }
+  };
+
   if (seedQuery.isLoading || inboxQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -223,18 +286,35 @@ export default function MessagesPage() {
           {selectedChat ? (
             <>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={selectedPartner?.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {(selectedPartner?.username || selectedChat).charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <CardTitle className="text-lg">
-                    {selectedPartner?.is_business
-                      ? selectedPartner?.business_name || selectedPartner?.username
-                      : selectedPartner?.username || 'Conversation'}
-                  </CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={selectedPartner?.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {(selectedPartner?.username || selectedChat).charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <CardTitle className="text-lg">
+                      {selectedPartner?.is_business
+                        ? selectedPartner?.business_name || selectedPartner?.username
+                        : selectedPartner?.username || 'Conversation'}
+                    </CardTitle>
+                  </div>
+                  {/* Show discount button only for business chats and non-business users */}
+                  {selectedPartner?.is_business && !profile?.is_business && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDiscountDialogOpen(true)}
+                      className="gap-2"
+                      disabled={availableDiscounts.length === 0}
+                    >
+                      <Ticket className="h-4 w-4" />
+                      {availableDiscounts.length > 0 
+                        ? `Use Discount (${bestDiscount?.discount})`
+                        : 'Earn more points for discounts'}
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
 
@@ -288,6 +368,62 @@ export default function MessagesPage() {
           )}
         </Card>
       </div>
+
+      {/* Discount Redemption Dialog */}
+      <Dialog open={discountDialogOpen} onOpenChange={setDiscountDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ticket className="h-5 w-5" /> Redeem Discount
+            </DialogTitle>
+            <DialogDescription>
+              Use your points to get a discount at {selectedPartner?.business_name || selectedPartner?.username}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-center gap-2 py-2 bg-primary/10 rounded-lg">
+              <Star className="h-5 w-5 text-primary" />
+              <span className="font-semibold">Your Points: {userPoints}</span>
+            </div>
+
+            <div className="space-y-2">
+              {discountTiers.map((tier) => {
+                const canAfford = userPoints >= tier.points;
+                return (
+                  <button
+                    key={tier.points}
+                    onClick={() => canAfford && handleRedeemDiscount(tier)}
+                    disabled={!canAfford || isRedeemingDiscount}
+                    className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                      canAfford 
+                        ? 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer' 
+                        : 'border-muted opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">{tier.label}</p>
+                        <p className="text-2xl font-bold text-primary">{tier.discount} OFF</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Cost</p>
+                        <p className="font-semibold flex items-center gap-1">
+                          {tier.points} <Star className="h-4 w-4 text-primary" />
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              After redeeming, a discount message will appear in the chat. Show it to the business to claim your discount!
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
