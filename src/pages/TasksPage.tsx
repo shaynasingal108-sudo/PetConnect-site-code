@@ -76,7 +76,7 @@ export default function TasksPage() {
 
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-tasks', {
+      const response = await supabase.functions.invoke('generate-tasks', {
         body: {
           userId: user.id,
           petType: profile.pet_type,
@@ -84,17 +84,17 @@ export default function TasksPage() {
         },
       });
 
-      if (error) throw error;
-      
-      // Check for already generated error from backend
-      if (data?.alreadyGenerated) {
+      // Check for already generated error (returned as 400 from backend)
+      if (response.data?.alreadyGenerated || response.error?.message?.includes('already generated')) {
         toast({
           title: 'Already generated today!',
           description: 'Come back tomorrow for new daily tasks.',
-          variant: 'destructive',
         });
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
         return;
       }
+
+      if (response.error) throw response.error;
 
       toast({ title: '5 Daily Tasks Generated!', description: 'Complete them to earn 5 points!' });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
