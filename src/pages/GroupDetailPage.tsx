@@ -124,27 +124,53 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleCreateEvent = async () => {
-    if (!user || !isOwner || !eventData.title || !eventData.date) return;
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
 
+  const handleCreateEvent = async () => {
+    if (!user || !isOwner || !eventData.title || !eventData.date) {
+      toast({ title: 'Missing fields', description: 'Please fill in title and date.', variant: 'destructive' });
+      return;
+    }
+
+    setIsCreatingEvent(true);
     try {
-      const { error } = await supabase.from('group_events').insert({
+      const { data: newEvent, error } = await supabase.from('group_events').insert({
         group_id: groupId,
         created_by: user.id,
         title: eventData.title,
-        description: eventData.description,
-        location: eventData.location,
+        description: eventData.description || null,
+        location: eventData.location || null,
         event_date: new Date(eventData.date).toISOString(),
-      });
+      }).select().single();
 
       if (error) throw error;
 
-      toast({ title: 'Event Created!', description: 'Members will be notified.' });
+      // Send notifications to all approved group members (except the owner)
+      if (members && members.length > 0) {
+        const notifications = members
+          .filter((m: any) => m.user_id !== user.id)
+          .map((m: any) => ({
+            user_id: m.user_id,
+            type: 'event',
+            title: `New event in ${group?.name}`,
+            content: `${eventData.title} - ${format(new Date(eventData.date), 'MMM d, h:mm a')}`,
+            related_id: newEvent.id,
+          }));
+
+        if (notifications.length > 0) {
+          await supabase.from('notifications').insert(notifications);
+        }
+      }
+
+      toast({ title: 'Event Created!', description: 'Members have been notified.' });
       setShowEventDialog(false);
       setEventData({ title: '', description: '', location: '', date: '' });
       queryClient.invalidateQueries({ queryKey: ['group-events', groupId] });
     } catch (error: any) {
+      console.error('Event creation error:', error);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsCreatingEvent(false);
     }
   };
 
@@ -266,7 +292,12 @@ export default function GroupDetailPage() {
                 value={eventData.date}
                 onChange={(e) => setEventData({ ...eventData, date: e.target.value })}
               />
-              <Button onClick={handleCreateEvent} className="w-full gradient-primary">
+              <Button 
+                onClick={handleCreateEvent} 
+                disabled={isCreatingEvent || !eventData.title || !eventData.date}
+                className="w-full gradient-primary"
+              >
+                {isCreatingEvent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Create Event
               </Button>
             </div>
