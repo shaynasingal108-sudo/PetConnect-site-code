@@ -31,9 +31,9 @@ type Conversation = {
 
 // Discount tiers based on points
 const discountTiers = [
-  { points: 10, discount: '5%', label: 'Bronze Discount' },
-  { points: 25, discount: '10%', label: 'Silver Discount' },
-  { points: 50, discount: '15%', label: 'Gold Discount' },
+  { points: 15, discount: '5%', label: 'Bronze Discount' },
+  { points: 30, discount: '10%', label: 'Silver Discount' },
+  { points: 60, discount: '15%', label: 'Gold Discount' },
   { points: 100, discount: '25%', label: 'Platinum Discount' },
 ];
 
@@ -200,7 +200,7 @@ export default function MessagesPage() {
 
       // Send discount message in chat
       const businessName = selectedPartner.business_name || selectedPartner.username;
-      const discountMessage = `🎟️ DISCOUNT REDEEMED!\n\n${tier.label}: ${tier.discount} OFF\nBusiness: ${businessName}\nPoints Used: ${tier.points}\n\nShow this message to redeem your discount!`;
+      const discountMessage = `🎟️ Discount of ${tier.discount} worth ${tier.points} points has been used at ${businessName}!`;
       
       const { error: msgError } = await supabase.from('messages').insert({
         sender_id: user.id,
