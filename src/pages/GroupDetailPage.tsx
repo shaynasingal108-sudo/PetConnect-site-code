@@ -72,11 +72,14 @@ export default function GroupDetailPage() {
   const { data: events } = useQuery({
     queryKey: ['group-events', groupId],
     queryFn: async () => {
+      // datetime-local inputs don't include seconds, so events created for "this minute"
+      // can end up a few seconds in the past and get filtered out. Give a small grace window.
+      const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('group_events')
         .select('*')
         .eq('group_id', groupId)
-        .gte('event_date', new Date().toISOString())
+        .gte('event_date', cutoffIso)
         .order('event_date', { ascending: true });
       return data || [];
     },
@@ -161,6 +164,15 @@ export default function GroupDetailPage() {
           await supabase.from('notifications').insert(notifications);
         }
       }
+
+      // Also notify the event creator (so you can verify it immediately in /notifications)
+      await supabase.from('notifications').insert({
+        user_id: user.id,
+        type: 'event',
+        title: '📅 Event Created',
+        content: `${eventData.title} - ${format(new Date(eventData.date), 'MMM d, h:mm a')}`,
+        related_id: newEvent.id,
+      });
 
       toast({ title: 'Event Created!', description: 'Members have been notified.' });
       setShowEventDialog(false);
