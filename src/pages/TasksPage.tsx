@@ -29,13 +29,113 @@ export default function TasksPage() {
   // Check if all today's tasks are completed (for bonus)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayStartIso = today.toISOString();
   const todaysTasks = tasks?.filter((t: any) => new Date(t.created_at) >= today) || [];
   const todaysPendingTasks = todaysTasks.filter((t: any) => !t.completed);
   const todaysCompletedTasks = todaysTasks.filter((t: any) => t.completed);
   const hasGeneratedToday = todaysTasks.length > 0;
 
+  const getTaskRequirement = (title: string): { metric: 'likes' | 'saves' | 'helpful' | 'comments' | 'posts'; target: number } | null => {
+    const t = (title || '').toLowerCase();
+    const num = (re: RegExp, fallback: number) => {
+      const m = t.match(re);
+      if (!m) return fallback;
+      const n = Number(m[1]);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    if (t.includes('create a new post')) return { metric: 'posts', target: 1 };
+    if (t.includes('helpful')) return { metric: 'helpful', target: num(/get\s+(\d+)\s+helpful/i, 1) };
+    if (t.includes('save')) return { metric: 'saves', target: num(/get\s+(\d+)\s+saves?/i, 1) };
+    if (t.includes('comment')) return { metric: 'comments', target: num(/get\s+(\d+)\s+comments?/i, 1) };
+    if (t.includes('like')) return { metric: 'likes', target: num(/get\s+(\d+)\s+likes?/i, 1) };
+    return null;
+  };
+
+  const computeTodayMetrics = async () => {
+    if (!user) {
+      return { likes: 0, saves: 0, helpful: 0, comments: 0, posts: 0 };
+    }
+
+    // Fetch up to 1000 of the user's posts to compute engagement received today.
+    // (If a user has more than 1000 posts, counts may be underreported.)
+    const { data: myPosts, error: postsError } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('user_id', user.id)
+      .limit(1000);
+    if (postsError) throw postsError;
+
+    const postIds = (myPosts || []).map((p: any) => p.id);
+
+    const countFor = async (
+      table: 'likes' | 'saved_posts' | 'helpful_marks' | 'comments',
+      extra?: (q: any) => any
+    ) => {
+      if (postIds.length === 0) return 0;
+      let q = supabase
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .in('post_id', postIds)
+        .gte('created_at', todayStartIso);
+      if (extra) q = extra(q);
+      const { count, error } = await q;
+      if (error) throw error;
+      return count || 0;
+    };
+
+    const likes = await countFor('likes');
+    const saves = await countFor('saved_posts');
+    const helpful = await countFor('helpful_marks');
+    const comments = await countFor('comments', (q) => q.neq('user_id', user.id));
+
+    const { count: posts, error: postsTodayError } = await supabase
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', todayStartIso);
+    if (postsTodayError) throw postsTodayError;
+
+    return {
+      likes,
+      saves,
+      helpful,
+      comments,
+      posts: posts || 0,
+    };
+  };
+
+  const { data: todayMetrics, isLoading: loadingMetrics } = useQuery({
+    queryKey: ['task-metrics', user?.id, todayStartIso],
+    queryFn: computeTodayMetrics,
+    enabled: !!user && hasGeneratedToday,
+    refetchOnWindowFocus: true,
+  });
+
   const completeTask = useMutation({
     mutationFn: async ({ taskId, points }: { taskId: string; points: number }) => {
+      if (!user) throw new Error('Not signed in');
+
+      // Ensure the task is actually completed before allowing the user to claim it.
+      const { data: taskRow, error: taskFetchError } = await supabase
+        .from('tasks')
+        .select('id, user_id, title, created_at, completed')
+        .eq('id', taskId)
+        .single();
+      if (taskFetchError) throw taskFetchError;
+      if (!taskRow || taskRow.user_id !== user.id) throw new Error('Task not found');
+      if (taskRow.completed) return { bonusPoints: 0, totalPoints: 0 };
+      if (new Date(taskRow.created_at) < today) throw new Error('This task is no longer claimable');
+
+      const req = getTaskRequirement(taskRow.title);
+      if (req) {
+        const metricsNow = await computeTodayMetrics();
+        const progress = metricsNow[req.metric];
+        if (progress < req.target) {
+          throw new Error(`Not completed yet (${progress}/${req.target}). Finish the task first.`);
+        }
+      }
+
       // Mark task as completed
       const { error: taskError } = await supabase
         .from('tasks')
@@ -44,8 +144,22 @@ export default function TasksPage() {
       if (taskError) throw taskError;
 
       // Check if this is the last task being completed today (for bonus)
-      const remainingTasks = todaysPendingTasks.filter((t: any) => t.id !== taskId);
-      const isLastTask = remainingTasks.length === 0 && todaysTasks.length >= 5;
+      const { count: remainingCount, error: remainingError } = await supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', todayStartIso)
+        .eq('completed', false);
+      if (remainingError) throw remainingError;
+
+      const { count: totalTodayCount, error: totalTodayError } = await supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', todayStartIso);
+      if (totalTodayError) throw totalTodayError;
+
+      const isLastTask = (remainingCount || 0) === 0 && (totalTodayCount || 0) >= 5;
       const bonusPoints = isLastTask ? 3 : 0;
       const totalPoints = points + bonusPoints;
 
@@ -60,6 +174,7 @@ export default function TasksPage() {
     },
     onSuccess: async (result, { points }) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task-metrics'] });
       await refreshProfile();
       
       if (result?.bonusPoints && result.bonusPoints > 0) {
@@ -233,39 +348,51 @@ export default function TasksPage() {
         <CardContent className="space-y-3">
           {pendingTasks.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground">
-              <p>No pending tasks! Generate new ones with AI.</p>
+              <p>{hasGeneratedToday ? 'All tasks claimed for today!' : 'No pending tasks! Generate new ones with AI.'}</p>
             </div>
           ) : (
-            pendingTasks.map((task: any) => (
+            todaysPendingTasks.map((task: any) => {
+              const req = getTaskRequirement(task.title);
+              const progress = req ? (todayMetrics?.[req.metric] ?? 0) : 0;
+              const target = req?.target ?? 0;
+              const canClaim = !req || progress >= target;
+
+              return (
               <button
                 key={task.id}
                 onClick={() => completeTask.mutate({ taskId: task.id, points: task.points || 2 })}
-                disabled={completeTask.isPending}
+                disabled={completeTask.isPending || loadingMetrics || !canClaim}
                 className="w-full flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
               >
-                <Circle className="h-6 w-6 text-muted-foreground flex-shrink-0" />
+                <Circle className={`h-6 w-6 flex-shrink-0 ${canClaim ? 'text-primary' : 'text-muted-foreground'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{task.title}</p>
                   {task.description && (
                     <p className="text-sm text-muted-foreground truncate">{task.description}</p>
+                  )}
+                  {req && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Progress: {Math.min(progress, target)}/{target} {canClaim ? '• Ready to claim' : '• Not complete yet'}
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-primary font-semibold flex-shrink-0">
                   +{task.points || 2} <Star className="h-4 w-4" />
                 </div>
               </button>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>
 
-      {completedTasks.length > 0 && (
+      {todaysCompletedTasks.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Completed</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {completedTasks.slice(0, 10).map((task: any) => (
+            {todaysCompletedTasks.slice(0, 10).map((task: any) => (
               <div
                 key={task.id}
                 className="flex items-center gap-4 p-4 rounded-lg border bg-muted/30 opacity-60"

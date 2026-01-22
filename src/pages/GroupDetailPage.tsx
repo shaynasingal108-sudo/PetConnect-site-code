@@ -72,14 +72,10 @@ export default function GroupDetailPage() {
   const { data: events } = useQuery({
     queryKey: ['group-events', groupId],
     queryFn: async () => {
-      // datetime-local inputs don't include seconds, so events created for "this minute"
-      // can end up a few seconds in the past and get filtered out. Give a small grace window.
-      const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('group_events')
         .select('*')
         .eq('group_id', groupId)
-        .gte('event_date', cutoffIso)
         .order('event_date', { ascending: true });
       return data || [];
     },
@@ -178,6 +174,7 @@ export default function GroupDetailPage() {
       setShowEventDialog(false);
       setEventData({ title: '', description: '', location: '', date: '' });
       queryClient.invalidateQueries({ queryKey: ['group-events', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
     } catch (error: any) {
       console.error('Event creation error:', error);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });

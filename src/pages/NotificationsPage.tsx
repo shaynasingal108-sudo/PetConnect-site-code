@@ -21,6 +21,10 @@ export default function NotificationsPage() {
       return data || [];
     },
     enabled: !!user,
+    // Ensure newly-created notifications show up immediately when you open this page
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const markAsRead = useMutation({
@@ -29,7 +33,7 @@ export default function NotificationsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
     },
   });
 
@@ -43,7 +47,7 @@ export default function NotificationsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
     },
   });
 
