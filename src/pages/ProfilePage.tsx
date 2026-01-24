@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, User, Save, Camera, Star, Gift, Percent, Rocket, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -69,6 +69,26 @@ export default function ProfilePage() {
     business_description: profile?.business_description || '',
     business_years: profile?.business_years || 0,
   });
+
+  // Sync form data when profile loads/changes
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        username: profile.username || '',
+        bio: profile.bio || '',
+        gender: profile.gender || '',
+        city: profile.city || '',
+        neighborhood: profile.neighborhood || '',
+        pet_type: profile.pet_type || '',
+        pet_breed: profile.pet_breed || '',
+        is_business: profile.is_business || false,
+        business_name: profile.business_name || '',
+        business_category: profile.business_category || '',
+        business_description: profile.business_description || '',
+        business_years: profile.business_years || 0,
+      });
+    }
+  }, [profile]);
 
   // Fetch user's posts for business accounts
   const { data: myPosts } = useQuery({
