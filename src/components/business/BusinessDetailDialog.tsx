@@ -87,6 +87,7 @@ export function BusinessDetailDialog({ business, open, onOpenChange }: BusinessD
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['business-ratings', businessUserId] });
       queryClient.invalidateQueries({ queryKey: ['user-business-rating', businessUserId, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-business-ratings'] });
       toast({ title: 'Rating submitted!', description: 'Thank you for your feedback.' });
     },
     onError: (error: any) => {
