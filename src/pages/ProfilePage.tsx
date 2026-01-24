@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, User, Save, Camera, Star, Gift, Percent, Rocket, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,8 @@ export default function ProfilePage() {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedBoost, setSelectedBoost] = useState(0);
   const [isBoostLoading, setIsBoostLoading] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     username: profile?.username || '',
@@ -141,6 +143,60 @@ export default function ProfilePage() {
       });
     } finally {
       setIsBoostLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !profile) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Invalid file', description: 'Please select an image file.', variant: 'destructive' });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Please select an image under 5MB.', variant: 'destructive' });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('post-images')
+        .getPublicUrl(filePath);
+
+      // Update profile with new avatar URL
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      await refreshProfile();
+      toast({ title: 'Photo updated!', description: 'Your profile picture has been changed.' });
+    } catch (error: any) {
+      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -395,8 +451,24 @@ export default function ProfilePage() {
             <AvatarImage src={profile?.avatar_url} />
             <AvatarFallback className="text-2xl">{profile?.username?.charAt(0)}</AvatarFallback>
           </Avatar>
-          <Button variant="outline">
-            <Camera className="h-4 w-4 mr-2" /> Change Photo
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarUpload}
+            className="hidden"
+          />
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingAvatar}
+          >
+            {isUploadingAvatar ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Camera className="h-4 w-4 mr-2" />
+            )}
+            {isUploadingAvatar ? 'Uploading...' : 'Change Photo'}
           </Button>
         </CardContent>
       </Card>
