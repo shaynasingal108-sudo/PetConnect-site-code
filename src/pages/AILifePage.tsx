@@ -16,7 +16,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, startOfDay, isToday } from 'date-fns';
 
 export default function AILifePage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -42,8 +42,27 @@ export default function AILifePage() {
     enabled: !!user,
   });
 
+  // Count today's entries
+  const todayEntriesCount = entries?.filter((entry: any) => 
+    isToday(new Date(entry.created_at))
+  ).length || 0;
+
+  const canAddEntry = todayEntriesCount < 2;
+
   const addEntry = useMutation({
     mutationFn: async () => {
+      // Check limit again on submit
+      const todayStart = startOfDay(new Date()).toISOString();
+      const { count } = await supabase
+        .from('ai_life_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id)
+        .gte('created_at', todayStart);
+
+      if ((count || 0) >= 2) {
+        throw new Error('You can only add 2 entries per day. Come back tomorrow!');
+      }
+
       const { error } = await supabase.from('ai_life_entries').insert({
         user_id: user?.id,
         content: newEntry,
@@ -68,6 +87,13 @@ export default function AILifePage() {
       toast({ 
         title: 'Entry added! +2 points 🎉', 
         description: 'Your pet update has been recorded.' 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Cannot add entry', 
+        description: error.message,
+        variant: 'destructive' 
       });
     },
   });
@@ -261,12 +287,22 @@ export default function AILifePage() {
           />
           <Button
             onClick={() => addEntry.mutate()}
-            disabled={!newEntry.trim() || addEntry.isPending}
+            disabled={!newEntry.trim() || addEntry.isPending || !canAddEntry}
             className="gradient-primary"
           >
             {addEntry.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
             Add Entry (+2 points)
           </Button>
+          {!canAddEntry && (
+            <p className="text-sm text-amber-600">
+              ⚠️ Daily limit reached (2/2). Come back tomorrow!
+            </p>
+          )}
+          {canAddEntry && (
+            <p className="text-xs text-muted-foreground">
+              {2 - todayEntriesCount} entries remaining today
+            </p>
+          )}
         </CardContent>
       </Card>
 
