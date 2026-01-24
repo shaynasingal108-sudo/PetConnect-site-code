@@ -165,20 +165,19 @@ export default function ProfilePage() {
     setIsUploadingAvatar(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
 
-      // Upload to storage
+      // Upload to storage (same path pattern as post images)
       const { error: uploadError } = await supabase.storage
         .from('post-images')
-        .upload(filePath, file, { upsert: true });
+        .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('post-images')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
 
       // Update profile with new avatar URL
       const { error: updateError } = await supabase
